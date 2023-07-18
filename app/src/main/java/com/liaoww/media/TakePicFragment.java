@@ -62,6 +62,9 @@ public class TakePicFragment extends MediaFragment {
 
     private String mPath;
 
+
+    private volatile boolean capture_ing = false;
+
     public static TakePicFragment of() {
         return new TakePicFragment();
     }
@@ -299,7 +302,11 @@ public class TakePicFragment extends MediaFragment {
 
                         @Override
                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                        }
 
+                        @Override
+                        public void onClosed(@NonNull CameraCaptureSession session) {
+                            super.onClosed(session);
                         }
                     });
             cameraDevice.createCaptureSession(sessionConfiguration);
@@ -328,7 +335,6 @@ public class TakePicFragment extends MediaFragment {
                     new CameraCaptureSession.StateCallback() {
                         @Override
                         public void onConfigured(@NonNull CameraCaptureSession session) {
-                            Log.d("liaoww", "onConfigured ");
                             try {
                                 mSession = session;
                                 //设置对焦模式为照片模式下的自动对焦
@@ -338,7 +344,9 @@ public class TakePicFragment extends MediaFragment {
                                 builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
 
                                 //闪光灯
-                                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+                                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+
+                                builder.set(CaptureRequest.FLASH_MODE,CaptureRequest.FLASH_MODE_SINGLE);
 
                                 //通过屏幕方向偏转照片，保证方向正确
                                 int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
@@ -364,7 +372,12 @@ public class TakePicFragment extends MediaFragment {
 
                         @Override
                         public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                        }
 
+                        @Override
+                        public void onClosed(@NonNull CameraCaptureSession session) {
+                            super.onClosed(session);
+                            capture_ing = false;
                         }
                     });
             cameraDevice.createCaptureSession(sessionConfiguration);
@@ -374,7 +387,10 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void takePic() {
-        closePreviewSession();
+        if(capture_ing){
+            return;
+        }
+        capture_ing = true;
         createCameraCaptureSession(mCameraDevice, buildCaptureSurface());
     }
 
