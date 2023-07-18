@@ -353,6 +353,10 @@ class CameraUtil {
         }
     }
 
+    public static Size findTargetSize(StreamConfigurationMap map, Size aspectRatio, int target) {
+        return CameraUtil.chooseVideoSize(map.getOutputSizes(target), aspectRatio, null);
+    }
+
 
     public static <T> Size findTargetSize(CameraManager cameraManager, String cameraId, Size aspectRatio, Class<T> target) {
         return findTargetSize(cameraManager, cameraId, aspectRatio, null, target);
@@ -376,6 +380,14 @@ class CameraUtil {
         } catch (CameraAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    public static Size findPreviewSize(StreamConfigurationMap map, Size aspectRatio, Size minSize) {
+        return CameraUtil.chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class), minSize.getWidth(), minSize.getHeight(), aspectRatio);
+    }
+
+    public static boolean findFlashAvailable(CameraCharacteristics characteristics) {
+        return characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
     }
 
     public static int findSensorOrientation(CameraManager cameraManager, String cameraId) {

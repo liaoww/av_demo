@@ -13,6 +13,7 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.media.ImageReader;
 import android.os.Bundle;
@@ -27,6 +28,7 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -62,8 +64,13 @@ public class TakePicFragment extends MediaFragment {
 
     private String mPath;
 
+    //拍照是否完成
+    private volatile boolean captureFinished = true;
 
-    private volatile boolean capture_ing = false;
+    private boolean mFlashSupported = false;
+
+    //闪光灯模式，默认关闭
+    private int mFlashMode = FlashMode.OFF;
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -108,7 +115,7 @@ public class TakePicFragment extends MediaFragment {
         if (isResumed()) {
             closeCamera();
             releaseHandler();
-            startPreview(mWidth, mHeight);
+            setUpAndPreview(mWidth, mHeight);
         }
     }
 
@@ -116,6 +123,20 @@ public class TakePicFragment extends MediaFragment {
         view.findViewById(R.id.take_pic_button).setOnClickListener(v -> {
             //拍照
             takePic();
+        });
+
+        Button flashButton = view.findViewById(R.id.flash_button);
+        flashButton.setOnClickListener(v -> {
+            //切换闪光灯模式
+            if (mFlashSupported) {
+                if (mFlashMode == FlashMode.OFF) {
+                    flashButton.setText("闪光灯开");
+                    mFlashMode = FlashMode.ONCE;
+                } else {
+                    flashButton.setText("闪光灯关");
+                    mFlashMode = FlashMode.OFF;
+                }
+            }
         });
     }
 
@@ -240,27 +261,44 @@ public class TakePicFragment extends MediaFragment {
         });
     }
 
-    private void startPreview(int width, int height) {
+    private void setUpAndPreview(int width, int height) {
         cameraManager = CameraUtil.fetchCameraManager(getActivity());
 
         if (cameraManager != null) {
             mCameraId = CameraUtil.findCameraId(cameraManager, mFacingId);
             if (!mCameraId.equals("")) {
                 int orientation = getResources().getConfiguration().orientation;
-                Size outputSize = CameraUtil.findTargetSize(cameraManager, mCameraId, mDefaultAspectRatio, ImageFormat.JPEG);
-                mPreviewSize = CameraUtil.findPreviewSize(outputSize, cameraManager, mCameraId,
-                        orientation == Configuration.ORIENTATION_LANDSCAPE ? new Size(width, height) : new Size(height, width));
-                if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                    mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-                } else {
-                    mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
+
+                CameraCharacteristics characteristics = null;
+                try {
+                    characteristics = cameraManager.getCameraCharacteristics(mCameraId);
+                    StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+                    //找到合适的输出尺寸
+                    Size outputSize = CameraUtil.findTargetSize(map, mDefaultAspectRatio, ImageFormat.JPEG);
+
+                    //找到合适的预览尺寸
+                    mPreviewSize = CameraUtil.findPreviewSize(map, outputSize,
+                            orientation == Configuration.ORIENTATION_LANDSCAPE ? new Size(width, height) : new Size(height, width));
+
+                    //判断设备是否支持闪光模式
+                    mFlashSupported = CameraUtil.findFlashAvailable(characteristics);
+
+                    if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                        mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());
+                    } else {
+                        mTextureView.setAspectRatio(mPreviewSize.getHeight(), mPreviewSize.getWidth());
+                    }
+                    CameraUtil.configureTransform(getActivity(), mTextureView, mPreviewSize, width, height);
+
+                    mHandler = initCameraHandler();
+
+                    mImageReader = initImageReader(outputSize.getWidth(), outputSize.getHeight(), mHandler);
+
+                    openCamera(cameraManager, mCameraId, mHandler, buildPreviewSurface());
+                } catch (CameraAccessException e) {
+                    throw new RuntimeException(e);
                 }
-                CameraUtil.configureTransform(getActivity(), mTextureView, mPreviewSize, width, height);
-                mHandler = initCameraHandler();
-
-                mImageReader = initImageReader(outputSize.getWidth(), outputSize.getHeight(), mHandler);
-
-                openCamera(cameraManager, mCameraId, mHandler, buildPreviewSurface());
             }
         }
     }
@@ -340,13 +378,15 @@ public class TakePicFragment extends MediaFragment {
                                 //设置对焦模式为照片模式下的自动对焦
                                 builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
-                                // 人脸检测模式
+                                //人脸检测模式
                                 builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
 
-                                //闪光灯
-                                builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
-
-                                builder.set(CaptureRequest.FLASH_MODE,CaptureRequest.FLASH_MODE_SINGLE);
+                                //设置闪光灯模式
+                                if (mFlashSupported) {
+                                    //经测试 暂时只支持单次闪光模式
+                                    builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE?CaptureRequest.FLASH_MODE_TORCH:CaptureRequest.FLASH_MODE_OFF);
+//                                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+                                }
 
                                 //通过屏幕方向偏转照片，保证方向正确
                                 int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
@@ -377,7 +417,7 @@ public class TakePicFragment extends MediaFragment {
                         @Override
                         public void onClosed(@NonNull CameraCaptureSession session) {
                             super.onClosed(session);
-                            capture_ing = false;
+                            captureFinished = true;
                         }
                     });
             cameraDevice.createCaptureSession(sessionConfiguration);
@@ -387,10 +427,10 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void takePic() {
-        if(capture_ing){
+        if (!captureFinished) {
             return;
         }
-        capture_ing = true;
+        captureFinished = false;
         createCameraCaptureSession(mCameraDevice, buildCaptureSurface());
     }
 
@@ -423,7 +463,7 @@ public class TakePicFragment extends MediaFragment {
             try {
                 mSteps.await();
                 getActivity().runOnUiThread(() -> {
-                    startPreview(mWidth, mHeight);
+                    setUpAndPreview(mWidth, mHeight);
                 });
 
             } catch (InterruptedException e) {
@@ -431,5 +471,9 @@ public class TakePicFragment extends MediaFragment {
             }
 
         }).start();
+    }
+
+    private void changeFlashMode() {
+
     }
 }
