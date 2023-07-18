@@ -1,1 +1,1 @@
-# av_demo
+# camera2 拍照demo
