@@ -57,6 +57,8 @@ public class TakePicFragment extends MediaFragment {
 
     private Handler mHandler;
 
+    private Button mFlashButton;
+
     private int mWidth, mHeight;
 
     //默认宽高比
@@ -90,7 +92,7 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output.jpg";
+        mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
         initTexture(view);
         findViews(view);
     }
@@ -125,15 +127,15 @@ public class TakePicFragment extends MediaFragment {
             takePic();
         });
 
-        Button flashButton = view.findViewById(R.id.flash_button);
-        flashButton.setOnClickListener(v -> {
+        mFlashButton = view.findViewById(R.id.flash_button);
+        mFlashButton.setOnClickListener(v -> {
             //切换闪光灯模式
             if (mFlashSupported) {
                 if (mFlashMode == FlashMode.OFF) {
-                    flashButton.setText("闪光灯开");
+                    mFlashButton.setText("闪光灯开");
                     mFlashMode = FlashMode.ONCE;
                 } else {
-                    flashButton.setText("闪光灯关");
+                    mFlashButton.setText("闪光灯关");
                     mFlashMode = FlashMode.OFF;
                 }
             }
@@ -198,7 +200,11 @@ public class TakePicFragment extends MediaFragment {
                     byte[] data = new byte[buffer.remaining()];
                     buffer.get(data);
                     image.close();
-                    CameraUtil.saveJpeg2File(data, mPath);
+                    String outputPath = CameraUtil.saveJpeg2File(data, mPath);
+                    if(outputPath!= null){
+                        //保存成功之后，弹窗显示
+                        PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(),"pic");
+                    }
                 }
             }
         }, handler);
@@ -283,6 +289,7 @@ public class TakePicFragment extends MediaFragment {
 
                     //判断设备是否支持闪光模式
                     mFlashSupported = CameraUtil.findFlashAvailable(characteristics);
+                    mFlashButton.setEnabled(mFlashSupported);
 
                     if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
                         mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());

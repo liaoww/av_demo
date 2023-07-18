@@ -422,15 +422,15 @@ class CameraUtil {
     }
 
 
-    public static boolean saveJpeg2File(byte[] data, String path) {
-        try (FileOutputStream fileOutputStream = new FileOutputStream(new File(path))) {
+    public static String saveJpeg2File(byte[] data, String path) {
+        String realPath = path + "-" + System.currentTimeMillis() + ".jpg";
+        try (FileOutputStream fileOutputStream = new FileOutputStream(new File(realPath))) {
             fileOutputStream.write(data);
         } catch (IOException e) {
             e.printStackTrace();
-            return false;
+            return null;
         }
-
-        return true;
+        return realPath;
     }
 
     public static void testFFmpeg() {
