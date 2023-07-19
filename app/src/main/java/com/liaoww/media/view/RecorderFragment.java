@@ -1,4 +1,4 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
@@ -31,6 +31,12 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.liaoww.media.CameraUtil;
+import com.liaoww.media.CustomMediaRecorder;
+import com.liaoww.media.FFmpeg;
+import com.liaoww.media.R;
+import com.liaoww.media.view.widget.AutoFitTextureView;
 
 import java.util.ArrayList;
 import java.util.List;

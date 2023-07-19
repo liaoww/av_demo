@@ -2,31 +2,31 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/container"
-    android:background="#000000"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="#000000">
 
     <Button
         android:id="@+id/take_pic_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="拍照"
         android:layout_margin="16dp"
-        app:layout_constraintLeft_toLeftOf="parent"
+        android:text="拍照"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent" />
 
     <Button
         android:id="@+id/flash_button"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="闪光灯关"
         android:layout_margin="16dp"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintBottom_toBottomOf="parent" />
+        android:text="闪光灯关"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintLeft_toLeftOf="parent" />
 
 
-    <com.liaoww.media.AutoFitTextureView
+    <com.liaoww.media.view.widget.AutoFitTextureView
         android:id="@+id/texture_view"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -34,5 +34,12 @@
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
+
+    <com.liaoww.media.view.widget.FocusView
+        android:id="@+id/focus_view"
+        android:clickable="true"
+        android:focusable="true"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

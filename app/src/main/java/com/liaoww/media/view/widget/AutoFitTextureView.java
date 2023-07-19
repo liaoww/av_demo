@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package com.liaoww.media;
+package com.liaoww.media.view.widget;
 
 import android.content.Context;
 import android.util.AttributeSet;
@@ -62,14 +62,18 @@ public class AutoFitTextureView extends TextureView {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
+
+        int realWidth = width;
+        int realHeight = height;
         if (0 == mRatioWidth || 0 == mRatioHeight) {
             setMeasuredDimension(width, height);
         } else {
             if (width < height * mRatioWidth / mRatioHeight) {
-                setMeasuredDimension(width, width * mRatioHeight / mRatioWidth);
+                realHeight = width * mRatioHeight / mRatioWidth;
             } else {
-                setMeasuredDimension(height * mRatioWidth / mRatioHeight, height);
+                realWidth = height * mRatioWidth / mRatioHeight;
             }
+            setMeasuredDimension(realWidth, realHeight);
         }
     }
 

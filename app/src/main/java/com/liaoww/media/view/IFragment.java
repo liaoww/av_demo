@@ -1,4 +1,4 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 public interface IFragment {
     /**

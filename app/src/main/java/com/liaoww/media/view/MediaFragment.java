@@ -1,8 +1,10 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 import android.hardware.camera2.CameraCharacteristics;
 
 import androidx.fragment.app.Fragment;
+
+import com.liaoww.media.view.IFragment;
 
 import java.util.concurrent.CountDownLatch;
 

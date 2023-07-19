@@ -1,6 +1,6 @@
 package com.liaoww.media;
 
-class FFmpeg {
+public class FFmpeg {
     static {
         System.loadLibrary("ffmpeg-util");
     }

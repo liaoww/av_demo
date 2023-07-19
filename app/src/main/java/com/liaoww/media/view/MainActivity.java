@@ -1,4 +1,4 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
@@ -18,6 +18,8 @@ import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.liaoww.media.FragmentAdapter;
+import com.liaoww.media.R;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_PERMISSIONS = 10000000;

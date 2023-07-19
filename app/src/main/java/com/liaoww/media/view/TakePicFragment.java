@@ -1,4 +1,4 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
@@ -33,6 +33,13 @@ import android.widget.Button;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.liaoww.media.CameraUtil;
+import com.liaoww.media.FlashMode;
+import com.liaoww.media.Orientations;
+import com.liaoww.media.R;
+import com.liaoww.media.view.widget.AutoFitTextureView;
+import com.liaoww.media.view.widget.FocusView;
+
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,6 +65,8 @@ public class TakePicFragment extends MediaFragment {
     private Handler mHandler;
 
     private Button mFlashButton;
+
+    private FocusView mFocusView;
 
     private int mWidth, mHeight;
 
@@ -93,8 +102,8 @@ public class TakePicFragment extends MediaFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
-        initTexture(view);
         findViews(view);
+        initTexture(view);
     }
 
     @Override
@@ -122,6 +131,7 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void findViews(View view) {
+        mFocusView = view.findViewById(R.id.focus_view);
         view.findViewById(R.id.take_pic_button).setOnClickListener(v -> {
             //拍照
             takePic();
@@ -201,9 +211,9 @@ public class TakePicFragment extends MediaFragment {
                     buffer.get(data);
                     image.close();
                     String outputPath = CameraUtil.saveJpeg2File(data, mPath);
-                    if(outputPath!= null){
+                    if (outputPath != null) {
                         //保存成功之后，弹窗显示
-                        PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(),"pic");
+                        PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(), "pic");
                     }
                 }
             }
@@ -227,7 +237,7 @@ public class TakePicFragment extends MediaFragment {
 
     private void releaseHandler() {
         if (mHandlerThread != null) {
-            mHandlerThread.quitSafely();
+            mHandlerThread.quit();
             mHandlerThread = null;
         }
 
@@ -249,8 +259,10 @@ public class TakePicFragment extends MediaFragment {
 
             @Override
             public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-                Log.d("liaoww", "onSurfaceTextureSizeChanged");
-
+                Log.d("liaoww", "onSurfaceTextureSizeChanged : " + width + " / " + height);
+                if (mFocusView != null) {
+                    mFocusView.updateEffectiveArea(width, height);
+                }
             }
 
             @Override
@@ -291,6 +303,7 @@ public class TakePicFragment extends MediaFragment {
                     mFlashSupported = CameraUtil.findFlashAvailable(characteristics);
                     mFlashButton.setEnabled(mFlashSupported);
 
+                    //设置textureView宽高比和 预览尺寸保持一致
                     if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
                         mTextureView.setAspectRatio(mPreviewSize.getWidth(), mPreviewSize.getHeight());
                     } else {
@@ -391,7 +404,7 @@ public class TakePicFragment extends MediaFragment {
                                 //设置闪光灯模式
                                 if (mFlashSupported) {
                                     //经测试 暂时只支持单次闪光模式
-                                    builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE?CaptureRequest.FLASH_MODE_TORCH:CaptureRequest.FLASH_MODE_OFF);
+                                    builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
 //                                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
                                 }
 

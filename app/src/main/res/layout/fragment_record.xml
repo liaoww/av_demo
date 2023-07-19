@@ -17,7 +17,7 @@
         app:layout_constraintRight_toRightOf="parent" />
 
 
-    <com.liaoww.media.AutoFitTextureView
+    <com.liaoww.media.view.widget.AutoFitTextureView
         android:id="@+id/texture_view"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

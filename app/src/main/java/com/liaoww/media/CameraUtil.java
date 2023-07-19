@@ -27,7 +27,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-class CameraUtil {
+public class CameraUtil {
 
     public static byte[] toYuvImage(Image image) {
         if (image.getFormat() != ImageFormat.YUV_420_888) {

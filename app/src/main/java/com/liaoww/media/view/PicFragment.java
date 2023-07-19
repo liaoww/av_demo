@@ -1,4 +1,4 @@
-package com.liaoww.media;
+package com.liaoww.media.view;
 
 import android.os.Bundle;
 import android.view.LayoutInflater;
@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
 
 import com.bumptech.glide.Glide;
+import com.liaoww.media.R;
 
 public class PicFragment extends DialogFragment {
     private ImageView mImageView;
@@ -23,7 +24,7 @@ public class PicFragment extends DialogFragment {
         bundle.putString("path", path);
         PicFragment fragment = new PicFragment();
         fragment.setArguments(bundle);
-        fragment.setStyle(DialogFragment.STYLE_NO_TITLE,R.style.PicFragment);
+        fragment.setStyle(DialogFragment.STYLE_NO_TITLE, R.style.PicFragment);
         return fragment;
     }
 
