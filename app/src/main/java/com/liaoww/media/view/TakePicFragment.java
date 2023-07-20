@@ -37,6 +37,7 @@ import android.widget.Button;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.liaoww.media.AspectRatio;
 import com.liaoww.media.CameraUtil;
 import com.liaoww.media.FlashMode;
 import com.liaoww.media.Orientations;
@@ -83,7 +84,7 @@ public class TakePicFragment extends MediaFragment {
     private Matrix mSurface2SensorMatrix;
 
     //默认宽高比
-    private Size mDefaultAspectRatio = new Size(4, 3);
+    private Size mDefaultAspectRatio = AspectRatio.AR_4_3;
 
     private String mPath;
 
@@ -96,6 +97,8 @@ public class TakePicFragment extends MediaFragment {
     private int mFlashMode = FlashMode.OFF;
 
     private FocusView.FocusListener mListener;
+
+    private Thread mSetupThread;
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -132,6 +135,7 @@ public class TakePicFragment extends MediaFragment {
         super.onPause();
         closeCamera();
         releaseHandler();
+        interruptSetUpThread();
     }
 
     @Override
@@ -140,6 +144,9 @@ public class TakePicFragment extends MediaFragment {
         if (mFocusView != null) {
             mFocusView.release();
         }
+        closeCamera();
+        releaseHandler();
+        interruptSetUpThread();
     }
 
     @Override
@@ -164,6 +171,26 @@ public class TakePicFragment extends MediaFragment {
             takePic();
         });
 
+        view.findViewById(R.id.aspectRatio_button).setOnClickListener(v -> {
+            if (mDefaultAspectRatio.equals(AspectRatio.AR_4_3)) {
+                mDefaultAspectRatio = AspectRatio.AR_1_1;
+            } else if (mDefaultAspectRatio.equals(AspectRatio.AR_1_1)) {
+                mDefaultAspectRatio = AspectRatio.AR_16_9;
+            } else {
+                mDefaultAspectRatio = AspectRatio.AR_4_3;
+            }
+            closeCamera();
+            releaseHandler();
+            setUpAndPreview(mWidth, mHeight);
+            //切换摄像头之后需要重新计算一下坐标转换matrix
+            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
+                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
+                    mSensorOrientation,
+                    new RectF(0, 0, mWidth, mHeight),
+                    sensorAreaRect);
+
+        });
+
         mFlashButton = view.findViewById(R.id.flash_button);
         mFlashButton.setOnClickListener(v -> {
             //切换闪光灯模式
@@ -185,13 +212,12 @@ public class TakePicFragment extends MediaFragment {
             mListener = new FocusView.FocusListener() {
                 @Override
                 public void onFocus(float x, float y) {
-                    Log.d("liaoww", "转换前 -- x : " + x + " y : " + y);
                     //坐标系转换
-                    int areaSize = mWidth / 5;
-                    int left = clamp((int) x - areaSize / 2, 0, mWidth - areaSize);
+                    int areaSize = mWidth / 5;//对焦区域
+                    int left = clamp((int) x - areaSize / 2, 0, mWidth - areaSize);//防止坐标超出范围
                     int top = clamp((int) y - areaSize / 2, 0, mHeight - areaSize);
+                    //使用matrix 转化
                     RectF rectF = CameraUtil.toCameraSpace(new RectF(left, top, left + areaSize, top + areaSize), mSurface2SensorMatrix);
-                    Log.d("liaoww", "转换后 : " + rectF.toShortString());
                     //构造
                     MeteringRectangle meteringRectangle
                             = new MeteringRectangle(
@@ -334,7 +360,7 @@ public class TakePicFragment extends MediaFragment {
 
                             //变换对焦区域坐标
                             mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
-                                    mFacingId == CameraCharacteristics.LENS_FACING_BACK,
+                                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
                                     mSensorOrientation,
                                     new RectF(0, 0, width, height),
                                     sensorAreaRect);
@@ -358,6 +384,7 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void setUpAndPreview(int width, int height) {
+        Log.d("liaoww", "setUpAndPreview");
         cameraManager = CameraUtil.fetchCameraManager(getActivity());
 
         if (cameraManager != null) {
@@ -489,7 +516,7 @@ public class TakePicFragment extends MediaFragment {
                                 if (mFlashSupported) {
                                     //经测试 暂时只支持单次闪光模式
                                     builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
-//                                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH);
+                                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
                                 }
 
                                 //通过屏幕方向偏转照片，保证方向正确
@@ -595,18 +622,39 @@ public class TakePicFragment extends MediaFragment {
         return surfaces;
     }
 
+    private void setUpThread() {
+        if (mSetupThread == null) {
+            mSetupThread = new Thread(() -> {
+                try {
+                    mSteps.await();
+                    if(mSetupThread.isInterrupted()){
+                        return;
+                    }
+                    getActivity().runOnUiThread(() -> {
+                        setUpAndPreview(mWidth, mHeight);
+                    });
+
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+
+            });
+        }
+    }
+
+    private void interruptSetUpThread(){
+        if(mSetupThread != null){
+            mSetupThread.interrupt();
+            mSetupThread = null;
+        }
+        if(mSteps != null){
+            mSteps.countDown();
+        }
+    }
+
+
     private void waitingForPrepared() {
-        new Thread(() -> {
-            try {
-                mSteps.await();
-                getActivity().runOnUiThread(() -> {
-                    setUpAndPreview(mWidth, mHeight);
-                });
-
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-
-        }).start();
+        setUpThread();
+        mSetupThread.start();
     }
 }

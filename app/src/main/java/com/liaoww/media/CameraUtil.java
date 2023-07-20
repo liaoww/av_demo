@@ -404,20 +404,15 @@ public class CameraUtil {
     public static Matrix previewToCameraTransform(boolean mirrorX, int sensorOrientation,
                                             RectF previewRect, RectF driverRecF) {
         Matrix transform = new Matrix();
-        // Need mirror for front camera.
+        //如果是前置摄像头，进行水平翻转
         transform.setScale(mirrorX ? -1 : 1, 1);
-        // Because preview orientation is different  form sensor orientation,
-        // rotate to same orientation, Counterclockwise.
+        //旋转角度
         transform.postRotate(-sensorOrientation);
-        // Map rotated matrix to preview rect
         transform.mapRect(previewRect);
-        // Map  preview coordinates to driver coordinates
         Matrix fill = new Matrix();
+        //使用填充模式
         fill.setRectToRect(previewRect, driverRecF, Matrix.ScaleToFit.FILL);
-        // Concat the previous transform on top of the fill behavior.
         transform.setConcat(fill, transform);
-        // finally get transform matrix
-        Log.d("liaoww" , "previewToCameraTransform : " + transform.toString());
         return transform;
     }
 

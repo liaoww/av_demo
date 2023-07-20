@@ -74,6 +74,7 @@ public class AutoFitTextureView extends TextureView {
             } else {
                 realWidth = height * mRatioWidth / mRatioHeight;
             }
+            Log.d("liaoww" , "AutoFitTextureView ----  width : " + realWidth + " height : " + realHeight);
             setMeasuredDimension(realWidth, realHeight);
         }
     }

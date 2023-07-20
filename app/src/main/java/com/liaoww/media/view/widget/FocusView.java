@@ -115,7 +115,6 @@ public class FocusView extends View {
      * 根据实际surface大小，更新焦点框的有效范围
      */
     public void updateEffectiveArea(int width, int height) {
-        Log.d("liaoww" , "updateEffectiveArea " + "w : " + getWidth() + "--- h : " + getHeight());
         mEffectiveWidth = width;
         mEffectiveHeight = height;
         getLayoutParams().width = width;
