@@ -149,6 +149,12 @@ public class TakePicFragment extends MediaFragment {
             closeCamera();
             releaseHandler();
             setUpAndPreview(mWidth, mHeight);
+            //切换摄像头之后需要重新计算一下坐标转换matrix
+            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
+                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
+                    mSensorOrientation,
+                    new RectF(0, 0, mWidth, mHeight),
+                    sensorAreaRect);
         }
     }
 
@@ -181,21 +187,34 @@ public class TakePicFragment extends MediaFragment {
                 public void onFocus(float x, float y) {
                     Log.d("liaoww", "转换前 -- x : " + x + " y : " + y);
                     //坐标系转换
-                    RectF rectF = CameraUtil.toCameraSpace(new RectF(x, y, x + 100, y + 100), mSurface2SensorMatrix);
+                    int areaSize = mWidth / 5;
+                    int left = clamp((int) x - areaSize / 2, 0, mWidth - areaSize);
+                    int top = clamp((int) y - areaSize / 2, 0, mHeight - areaSize);
+                    RectF rectF = CameraUtil.toCameraSpace(new RectF(left, top, left + areaSize, top + areaSize), mSurface2SensorMatrix);
                     Log.d("liaoww", "转换后 : " + rectF.toShortString());
                     //构造
-//                    MeteringRectangle meteringRectangle
-//                            = new MeteringRectangle(
-//                            new Rect(Math.round(rectF.left),
-//                                    Math.round(rectF.top),
-//                                    Math.round(rectF.right),
-//                                    Math.round(rectF.bottom)),
-//                            MeteringRectangle.METERING_WEIGHT_MAX);
-//                    createControlAFRequest(meteringRectangle, buildPreviewSurface());
+                    MeteringRectangle meteringRectangle
+                            = new MeteringRectangle(
+                            new Rect(Math.round(rectF.left),
+                                    Math.round(rectF.top),
+                                    Math.round(rectF.right),
+                                    Math.round(rectF.bottom)),
+                            MeteringRectangle.METERING_WEIGHT_MAX);
+                    createControlAFRequest(meteringRectangle, buildPreviewSurface());
                 }
             };
         }
         mFocusView.addTouchFocusListener(mListener);
+    }
+
+    private int clamp(int x, int min, int max) {
+        if (x > max) {
+            return max;
+        }
+        if (x < min) {
+            return min;
+        }
+        return x;
     }
 
     @SuppressLint("MissingPermission")
@@ -308,14 +327,19 @@ public class TakePicFragment extends MediaFragment {
                 Log.d("liaoww", "onSurfaceTextureSizeChanged : " + width + " / " + height);
                 if (mFocusView != null) {
                     //更新实际的画面区域
-                    mFocusView.updateEffectiveArea(width, height);
+                    mFocusView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            mFocusView.updateEffectiveArea(width, height);
 
-                    //变换对焦区域坐标
-                    mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
-                            false,
-                            mSensorOrientation,
-                            new RectF(0, 0, width, height),
-                            sensorAreaRect);
+                            //变换对焦区域坐标
+                            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
+                                    mFacingId == CameraCharacteristics.LENS_FACING_BACK,
+                                    mSensorOrientation,
+                                    new RectF(0, 0, width, height),
+                                    sensorAreaRect);
+                        }
+                    });
                 }
             }
 
@@ -521,20 +545,19 @@ public class TakePicFragment extends MediaFragment {
                 builder.addTarget(surface);
             }
 
-            try {
-                // AE/AF区域设置通过setRepeatingRequest不断发请求
-                mSession.setRepeatingRequest(builder.build(), null, mHandler);
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
-            }
+            // AE/AF区域设置通过setRepeatingRequest不断发请求
+            mSession.setRepeatingRequest(builder.build(), null, mHandler);
             //触发对焦
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
-            try {
-                //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
-                mSession.capture(builder.build(), null, mHandler);
-            } catch (CameraAccessException e) {
-                e.printStackTrace();
-            }
+            //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
+            mSession.capture(builder.build(), new CameraCaptureSession.CaptureCallback() {
+                @Override
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                    super.onCaptureCompleted(session, request, result);
+                    Log.d("liaoww", "对焦完成");
+                }
+            }, mHandler);
+
         } catch (CameraAccessException exception) {
             exception.printStackTrace();
         }

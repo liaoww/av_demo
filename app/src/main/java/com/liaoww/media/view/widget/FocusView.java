@@ -1,5 +1,7 @@
 package com.liaoww.media.view.widget;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -19,11 +21,6 @@ public class FocusView extends View {
     private int mEffectiveWidth = -1;
 
     private int mEffectiveHeight = -1;
-
-    private float mEffectiveLeft = -1;
-    private float mEffectiveTop = -1;
-    private float mEffectiveRight = -1;
-    private float mEffectiveBottom = -1;
 
     private float mFrameWidth = 256;
 
@@ -62,23 +59,23 @@ public class FocusView extends View {
         if (mAnimationEnable) {
             float offsetX = mDownEventX;
             float offsetY = mDownEventY;
-            if ((offsetX - mFrameWidth / 2) < mEffectiveLeft) {
+            if ((offsetX - mFrameWidth / 2) < 0) {
                 //焦点框超过了有效范围最左侧，向右偏移x坐标
-                offsetX = offsetX + mEffectiveLeft - (offsetX - mFrameWidth / 2);
+                offsetX = offsetX + 0 - (offsetX - mFrameWidth / 2);
             }
-            if ((offsetY - mFrameWidth / 2) < mEffectiveTop) {
+            if ((offsetY - mFrameWidth / 2) < 0) {
                 //焦点框超过了有效范围最上侧，向下偏移y坐标
-                offsetY = offsetY + mEffectiveTop - (offsetY - mFrameWidth / 2);
+                offsetY = offsetY + 0 - (offsetY - mFrameWidth / 2);
             }
 
-            if ((offsetX + mFrameWidth / 2) > mEffectiveRight) {
+            if ((offsetX + mFrameWidth / 2) > mEffectiveWidth) {
                 //焦点框超过了有效范围最右侧，向左偏移x坐标
-                offsetX = offsetX - ((offsetX + mFrameWidth / 2) - mEffectiveRight);
+                offsetX = offsetX - ((offsetX + mFrameWidth / 2) - mEffectiveWidth);
             }
 
-            if ((offsetY + mFrameWidth / 2) > mEffectiveBottom) {
+            if ((offsetY + mFrameWidth / 2) > mEffectiveHeight) {
                 //焦点框超过了有效范围最下侧，向上偏移y坐标
-                offsetY = offsetY - ((offsetY + mFrameWidth / 2) - mEffectiveBottom);
+                offsetY = offsetY - ((offsetY + mFrameWidth / 2) - mEffectiveHeight);
             }
             canvas.drawRoundRect(
                     offsetX - mFrameWidth / 2,
@@ -95,11 +92,9 @@ public class FocusView extends View {
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                if (isInEffectiveArea(event.getX(), event.getY())) {
-                    mDownEventX = event.getX();
-                    mDownEventY = event.getY();
-                    mDownEventTime = SystemClock.currentThreadTimeMillis();
-                }
+                mDownEventX = event.getX();
+                mDownEventY = event.getY();
+                mDownEventTime = SystemClock.currentThreadTimeMillis();
                 break;
             case MotionEvent.ACTION_MOVE:
                 break;
@@ -123,10 +118,9 @@ public class FocusView extends View {
         Log.d("liaoww" , "updateEffectiveArea " + "w : " + getWidth() + "--- h : " + getHeight());
         mEffectiveWidth = width;
         mEffectiveHeight = height;
-        mEffectiveLeft = (getWidth() - mEffectiveWidth) / 2f;
-        mEffectiveTop = (getHeight() - mEffectiveHeight) / 2f;
-        mEffectiveRight = getWidth() - ((getWidth() - mEffectiveWidth) / 2f);
-        mEffectiveBottom = getHeight() - ((getHeight() - mEffectiveHeight) / 2f);
+        getLayoutParams().width = width;
+        getLayoutParams().height = height;
+        requestLayout();
     }
 
     public interface FocusListener {
@@ -182,11 +176,23 @@ public class FocusView extends View {
             mFrameWidth = (float) animation.getAnimatedValue();
             invalidate();
         });
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationStart(Animator animation) {
+                super.onAnimationStart(animation);
+                mAnimationEnable = true;
+            }
+
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                super.onAnimationEnd(animation);
+                mAnimationEnable = false;
+            }
+        });
         return animator;
     }
 
     private void doFrameAnimation() {
-        mAnimationEnable = true;
         if (mFocusAnimation == null) {
             mFocusAnimation = setUpFocusAnimation();
         }
@@ -196,13 +202,5 @@ public class FocusView extends View {
     private boolean isClick(float x, float y) {
         //点击偏移不超过10像素且间隔小于100毫秒，判定为点击
         return (Math.abs(x - mDownEventX) < 10 && Math.abs(y - mDownEventY) < 10 && (SystemClock.currentThreadTimeMillis() - mDownEventTime) < 100);
-    }
-
-    private boolean isInEffectiveArea(float x, float y) {
-        //判断点击的是否是画面有效区域
-        return (x > mEffectiveLeft) &&
-                (y > mEffectiveTop) &&
-                (x < mEffectiveRight) &&
-                (y < mEffectiveBottom);
     }
 }

@@ -14,7 +14,7 @@ public class MediaFragment extends Fragment implements IFragment {
     protected CountDownLatch mSteps = new CountDownLatch(2);
 
     //默认启动摄像头
-    protected int mFacingId = CameraCharacteristics.LENS_FACING_FRONT;
+    protected int mFacingId = CameraCharacteristics.LENS_FACING_BACK;
 
 
     @Override

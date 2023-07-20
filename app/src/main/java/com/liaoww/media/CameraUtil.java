@@ -417,6 +417,7 @@ public class CameraUtil {
         // Concat the previous transform on top of the fill behavior.
         transform.setConcat(fill, transform);
         // finally get transform matrix
+        Log.d("liaoww" , "previewToCameraTransform : " + transform.toString());
         return transform;
     }
 
