@@ -4,6 +4,9 @@ import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
+import android.graphics.RectF;
+import android.graphics.Rect;
+import android.graphics.Matrix;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -11,6 +14,7 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.TotalCaptureResult;
+import android.hardware.camera2.params.MeteringRectangle;
 import android.hardware.camera2.params.OutputConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
 import android.hardware.camera2.params.StreamConfigurationMap;
@@ -70,6 +74,14 @@ public class TakePicFragment extends MediaFragment {
 
     private int mWidth, mHeight;
 
+    private int mSensorOrientation;
+
+    //相机预览区域坐标系
+    private RectF sensorAreaRect;
+
+    //渲染区域坐标 - 相机坐标系
+    private Matrix mSurface2SensorMatrix;
+
     //默认宽高比
     private Size mDefaultAspectRatio = new Size(4, 3);
 
@@ -82,6 +94,8 @@ public class TakePicFragment extends MediaFragment {
 
     //闪光灯模式，默认关闭
     private int mFlashMode = FlashMode.OFF;
+
+    private FocusView.FocusListener mListener;
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -103,6 +117,7 @@ public class TakePicFragment extends MediaFragment {
         super.onViewCreated(view, savedInstanceState);
         mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
         findViews(view);
+        initFocusView(view);
         initTexture(view);
     }
 
@@ -119,6 +134,13 @@ public class TakePicFragment extends MediaFragment {
         releaseHandler();
     }
 
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mFocusView != null) {
+            mFocusView.release();
+        }
+    }
 
     @Override
     public void changeCamera() {
@@ -131,7 +153,6 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void findViews(View view) {
-        mFocusView = view.findViewById(R.id.focus_view);
         view.findViewById(R.id.take_pic_button).setOnClickListener(v -> {
             //拍照
             takePic();
@@ -150,6 +171,31 @@ public class TakePicFragment extends MediaFragment {
                 }
             }
         });
+    }
+
+    private void initFocusView(View view) {
+        mFocusView = view.findViewById(R.id.focus_view);
+        if (mListener == null) {
+            mListener = new FocusView.FocusListener() {
+                @Override
+                public void onFocus(float x, float y) {
+                    Log.d("liaoww", "转换前 -- x : " + x + " y : " + y);
+                    //坐标系转换
+                    RectF rectF = CameraUtil.toCameraSpace(new RectF(x, y, x + 100, y + 100), mSurface2SensorMatrix);
+                    Log.d("liaoww", "转换后 : " + rectF.toShortString());
+                    //构造
+//                    MeteringRectangle meteringRectangle
+//                            = new MeteringRectangle(
+//                            new Rect(Math.round(rectF.left),
+//                                    Math.round(rectF.top),
+//                                    Math.round(rectF.right),
+//                                    Math.round(rectF.bottom)),
+//                            MeteringRectangle.METERING_WEIGHT_MAX);
+//                    createControlAFRequest(meteringRectangle, buildPreviewSurface());
+                }
+            };
+        }
+        mFocusView.addTouchFocusListener(mListener);
     }
 
     @SuppressLint("MissingPermission")
@@ -261,7 +307,15 @@ public class TakePicFragment extends MediaFragment {
             public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
                 Log.d("liaoww", "onSurfaceTextureSizeChanged : " + width + " / " + height);
                 if (mFocusView != null) {
+                    //更新实际的画面区域
                     mFocusView.updateEffectiveArea(width, height);
+
+                    //变换对焦区域坐标
+                    mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
+                            false,
+                            mSensorOrientation,
+                            new RectF(0, 0, width, height),
+                            sensorAreaRect);
                 }
             }
 
@@ -302,6 +356,12 @@ public class TakePicFragment extends MediaFragment {
                     //判断设备是否支持闪光模式
                     mFlashSupported = CameraUtil.findFlashAvailable(characteristics);
                     mFlashButton.setEnabled(mFlashSupported);
+
+                    //找到sensor方向
+                    mSensorOrientation = CameraUtil.findSensorOrientation(cameraManager, mCameraId);
+
+                    //找到对焦区域
+                    sensorAreaRect = new RectF(CameraUtil.findSensorActiveArraySize(characteristics));
 
                     //设置textureView宽高比和 预览尺寸保持一致
                     if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -411,10 +471,8 @@ public class TakePicFragment extends MediaFragment {
                                 //通过屏幕方向偏转照片，保证方向正确
                                 int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
 
-                                int sensorOrientation = CameraUtil.findSensorOrientation(cameraManager, mCameraId);
-
                                 builder.set(CaptureRequest.JPEG_ORIENTATION,
-                                        (Orientations.DEFAULT_ORIENTATIONS.get(rotation) + sensorOrientation + 270) % 360);
+                                        (Orientations.DEFAULT_ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360);
 
                                 //启动拍照
                                 session.capture(builder.build(), new CameraCaptureSession.CaptureCallback() {
@@ -443,6 +501,42 @@ public class TakePicFragment extends MediaFragment {
             cameraDevice.createCaptureSession(sessionConfiguration);
         } catch (CameraAccessException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+
+    private void createControlAFRequest(MeteringRectangle rect, List<Surface> surfaces) {
+        try {
+            CaptureRequest.Builder builder = mCameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            MeteringRectangle[] rectangle = new MeteringRectangle[]{rect};
+            // 对焦模式必须设置为AUTO
+            builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO);
+            //AE
+            builder.set(CaptureRequest.CONTROL_AE_REGIONS, rectangle);
+            //AF 此处AF和AE用的同一个rect, 实际AE矩形面积比AF稍大, 这样测光效果更好
+            builder.set(CaptureRequest.CONTROL_AF_REGIONS, rectangle);
+
+            //给请求添加surface 作为图像输出目标
+            for (Surface surface : surfaces) {
+                builder.addTarget(surface);
+            }
+
+            try {
+                // AE/AF区域设置通过setRepeatingRequest不断发请求
+                mSession.setRepeatingRequest(builder.build(), null, mHandler);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+            //触发对焦
+            builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
+            try {
+                //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
+                mSession.capture(builder.build(), null, mHandler);
+            } catch (CameraAccessException e) {
+                e.printStackTrace();
+            }
+        } catch (CameraAccessException exception) {
+            exception.printStackTrace();
         }
     }
 
@@ -491,9 +585,5 @@ public class TakePicFragment extends MediaFragment {
             }
 
         }).start();
-    }
-
-    private void changeFlashMode() {
-
     }
 }

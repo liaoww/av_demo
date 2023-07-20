@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.os.SystemClock;
 import android.util.AttributeSet;
+import android.util.Log;
+import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
@@ -35,6 +37,8 @@ public class FocusView extends View {
     private boolean mAnimationEnable = false;
 
     private ValueAnimator mFocusAnimation;
+
+    private SparseArray<FocusListener> listeners;
 
 
     public FocusView(Context context) {
@@ -102,6 +106,7 @@ public class FocusView extends View {
             case MotionEvent.ACTION_UP:
                 if (isClick(event.getX(), event.getY())) {
                     doFrameAnimation();
+                    notifyTouchFocusListener(event.getX(), event.getY());
                 }
                 break;
             case MotionEvent.ACTION_CANCEL:
@@ -115,12 +120,50 @@ public class FocusView extends View {
      * 根据实际surface大小，更新焦点框的有效范围
      */
     public void updateEffectiveArea(int width, int height) {
+        Log.d("liaoww" , "updateEffectiveArea " + "w : " + getWidth() + "--- h : " + getHeight());
         mEffectiveWidth = width;
         mEffectiveHeight = height;
         mEffectiveLeft = (getWidth() - mEffectiveWidth) / 2f;
         mEffectiveTop = (getHeight() - mEffectiveHeight) / 2f;
         mEffectiveRight = getWidth() - ((getWidth() - mEffectiveWidth) / 2f);
         mEffectiveBottom = getHeight() - ((getHeight() - mEffectiveHeight) / 2f);
+    }
+
+    public interface FocusListener {
+        void onFocus(float x, float y);
+    }
+
+    public void addTouchFocusListener(FocusListener listener) {
+        if (listeners == null) {
+            listeners = new SparseArray<>();
+        }
+        listeners.put(listener.hashCode(), listener);
+    }
+
+    public void removeTouchFocusListener(FocusListener listener) {
+        if (listeners != null) {
+            listeners.remove(listener.hashCode());
+        }
+    }
+
+    public void release() {
+        if (mFocusAnimation != null) {
+            mFocusAnimation.cancel();
+        }
+        if (listeners != null) {
+            for (int i = 0; i < listeners.size(); i++) {
+                listeners.remove(i);
+            }
+        }
+        listeners = null;
+    }
+
+    private void notifyTouchFocusListener(float x, float y) {
+        if (listeners != null) {
+            for (int i = 0; i < listeners.size(); i++) {
+                listeners.valueAt(i).onFocus(x, y);
+            }
+        }
     }
 
 

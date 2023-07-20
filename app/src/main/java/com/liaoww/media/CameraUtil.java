@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Context;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
@@ -173,8 +174,7 @@ public class CameraUtil {
         ByteBuffer vBuffer;
         //part1 获得真正的消除padding的ybuffer和ubuffer。需要对P格式和SP格式做不同的处理。如果是P格式的话只能逐像素去做，性能会降低。
         if (image.getPlanes()[2].getPixelStride() == 1) { //如果为true，说明是P格式。
-            vBuffer = getuvBufferWithoutPaddingP(image.getPlanes()[1].getBuffer(), image.getPlanes()[2].getBuffer(),
-                    width, height, image.getPlanes()[1].getRowStride(), image.getPlanes()[1].getPixelStride());
+            vBuffer = getuvBufferWithoutPaddingP(image.getPlanes()[1].getBuffer(), image.getPlanes()[2].getBuffer(), width, height, image.getPlanes()[1].getRowStride(), image.getPlanes()[1].getPixelStride());
         } else {
             vBuffer = getBufferWithoutPadding(image.getPlanes()[2].getBuffer(), image.getWidth(), image.getPlanes()[2].getRowStride(), image.getHeight() / 2, true);
         }
@@ -273,8 +273,7 @@ public class CameraUtil {
         @Override
         public int compare(Size lhs, Size rhs) {
             // We cast here to ensure the multiplications won't overflow
-            return Long.signum((long) lhs.getWidth() * lhs.getHeight() -
-                    (long) rhs.getWidth() * rhs.getHeight());
+            return Long.signum((long) lhs.getWidth() * lhs.getHeight() - (long) rhs.getWidth() * rhs.getHeight());
         }
 
     }
@@ -297,8 +296,7 @@ public class CameraUtil {
         int w = aspectRatio.getWidth();
         int h = aspectRatio.getHeight();
         for (Size option : choices) {
-            if (option.getHeight() == option.getWidth() * h / w &&
-                    option.getWidth() >= width && option.getHeight() >= height) {
+            if (option.getHeight() == option.getWidth() * h / w && option.getWidth() >= width && option.getHeight() >= height) {
                 bigEnough.add(option);
             }
         }
@@ -399,6 +397,35 @@ public class CameraUtil {
         }
     }
 
+    public static Rect findSensorActiveArraySize(CameraCharacteristics characteristics) {
+        return characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
+    }
+
+    public static Matrix previewToCameraTransform(boolean mirrorX, int sensorOrientation,
+                                            RectF previewRect, RectF driverRecF) {
+        Matrix transform = new Matrix();
+        // Need mirror for front camera.
+        transform.setScale(mirrorX ? -1 : 1, 1);
+        // Because preview orientation is different  form sensor orientation,
+        // rotate to same orientation, Counterclockwise.
+        transform.postRotate(-sensorOrientation);
+        // Map rotated matrix to preview rect
+        transform.mapRect(previewRect);
+        // Map  preview coordinates to driver coordinates
+        Matrix fill = new Matrix();
+        fill.setRectToRect(previewRect, driverRecF, Matrix.ScaleToFit.FILL);
+        // Concat the previous transform on top of the fill behavior.
+        transform.setConcat(fill, transform);
+        // finally get transform matrix
+        return transform;
+    }
+
+    public static RectF toCameraSpace(RectF source, Matrix matrix) {
+        RectF result = new RectF();
+        matrix.mapRect(result, source);
+        return result;
+    }
+
     public static void configureTransform(Activity activity, TextureView textureView, Size size, int viewWidth, int viewHeight) {
         if (null == textureView || null == size || null == activity) {
             return;
@@ -412,9 +439,7 @@ public class CameraUtil {
         if (Surface.ROTATION_90 == rotation || Surface.ROTATION_270 == rotation) {
             bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
             matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
-            float scale = Math.max(
-                    (float) viewHeight / size.getHeight(),
-                    (float) viewWidth / size.getWidth());
+            float scale = Math.max((float) viewHeight / size.getHeight(), (float) viewWidth / size.getWidth());
             matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (rotation - 2), centerX, centerY);
         }
