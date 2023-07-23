@@ -33,6 +33,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -100,6 +101,8 @@ public class TakePicFragment extends MediaFragment {
 
     private Thread mSetupThread;
 
+    private View mView;
+
     public static TakePicFragment of() {
         return new TakePicFragment();
     }
@@ -119,9 +122,10 @@ public class TakePicFragment extends MediaFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
+        mView = view;
         findViews(view);
         initFocusView(view);
-        initTexture(view);
+        initTexture();
     }
 
     @Override
@@ -156,12 +160,6 @@ public class TakePicFragment extends MediaFragment {
             closeCamera();
             releaseHandler();
             setUpAndPreview(mWidth, mHeight);
-            //切换摄像头之后需要重新计算一下坐标转换matrix
-            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
-                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
-                    mSensorOrientation,
-                    new RectF(0, 0, mWidth, mHeight),
-                    sensorAreaRect);
         }
     }
 
@@ -179,16 +177,12 @@ public class TakePicFragment extends MediaFragment {
             } else {
                 mDefaultAspectRatio = AspectRatio.AR_4_3;
             }
+            //切换宽高比，需要重新创建TextureView
+            interruptSetUpThread();
+            initTexture();
             closeCamera();
             releaseHandler();
-            setUpAndPreview(mWidth, mHeight);
-            //切换摄像头之后需要重新计算一下坐标转换matrix
-            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
-                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
-                    mSensorOrientation,
-                    new RectF(0, 0, mWidth, mHeight),
-                    sensorAreaRect);
-
+            waitingForPrepared();
         });
 
         mFlashButton = view.findViewById(R.id.flash_button);
@@ -219,13 +213,7 @@ public class TakePicFragment extends MediaFragment {
                     //使用matrix 转化
                     RectF rectF = CameraUtil.toCameraSpace(new RectF(left, top, left + areaSize, top + areaSize), mSurface2SensorMatrix);
                     //构造
-                    MeteringRectangle meteringRectangle
-                            = new MeteringRectangle(
-                            new Rect(Math.round(rectF.left),
-                                    Math.round(rectF.top),
-                                    Math.round(rectF.right),
-                                    Math.round(rectF.bottom)),
-                            MeteringRectangle.METERING_WEIGHT_MAX);
+                    MeteringRectangle meteringRectangle = new MeteringRectangle(new Rect(Math.round(rectF.left), Math.round(rectF.top), Math.round(rectF.right), Math.round(rectF.bottom)), MeteringRectangle.METERING_WEIGHT_MAX);
                     createControlAFRequest(meteringRectangle, buildPreviewSurface());
                 }
             };
@@ -338,8 +326,11 @@ public class TakePicFragment extends MediaFragment {
         }
     }
 
-    private void initTexture(View view) {
-        mTextureView = view.findViewById(R.id.texture_view);
+    private void initTexture() {
+        LinearLayout container = mView.findViewById(R.id.surface_container);
+        container.removeAllViews();
+        mTextureView = null;
+        mTextureView = new AutoFitTextureView(getActivity().getApplicationContext());
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
@@ -359,11 +350,7 @@ public class TakePicFragment extends MediaFragment {
                             mFocusView.updateEffectiveArea(width, height);
 
                             //变换对焦区域坐标
-                            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(
-                                    mFacingId == CameraCharacteristics.LENS_FACING_FRONT,
-                                    mSensorOrientation,
-                                    new RectF(0, 0, width, height),
-                                    sensorAreaRect);
+                            mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(mFacingId == CameraCharacteristics.LENS_FACING_FRONT, mSensorOrientation, new RectF(0, 0, width, height), sensorAreaRect);
                         }
                     });
                 }
@@ -381,6 +368,7 @@ public class TakePicFragment extends MediaFragment {
 
             }
         });
+        container.addView(mTextureView);
     }
 
     private void setUpAndPreview(int width, int height) {
@@ -401,8 +389,7 @@ public class TakePicFragment extends MediaFragment {
                     Size outputSize = CameraUtil.findTargetSize(map, mDefaultAspectRatio, ImageFormat.JPEG);
 
                     //找到合适的预览尺寸
-                    mPreviewSize = CameraUtil.findPreviewSize(map, outputSize,
-                            orientation == Configuration.ORIENTATION_LANDSCAPE ? new Size(width, height) : new Size(height, width));
+                    mPreviewSize = CameraUtil.findPreviewSize(map, outputSize, orientation == Configuration.ORIENTATION_LANDSCAPE ? new Size(width, height) : new Size(height, width));
 
                     //判断设备是否支持闪光模式
                     mFlashSupported = CameraUtil.findFlashAvailable(characteristics);
@@ -413,6 +400,9 @@ public class TakePicFragment extends MediaFragment {
 
                     //找到对焦区域
                     sensorAreaRect = new RectF(CameraUtil.findSensorActiveArraySize(characteristics));
+
+                    //切换摄像头之后需要重新计算一下坐标转换matrix
+                    mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(mFacingId == CameraCharacteristics.LENS_FACING_FRONT, mSensorOrientation, new RectF(0, 0, mWidth, mHeight), sensorAreaRect);
 
                     //设置textureView宽高比和 预览尺寸保持一致
                     if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -447,37 +437,33 @@ public class TakePicFragment extends MediaFragment {
                 outputConfigurations.add(new OutputConfiguration(surface));
             }
 
-            SessionConfiguration sessionConfiguration = new SessionConfiguration(
-                    SessionConfiguration.SESSION_REGULAR,
-                    outputConfigurations,
-                    getActivity().getMainExecutor(),
-                    new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            try {
-                                mSession = session;
-                                //设置对焦模式为照片模式下的自动对焦
-                                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            SessionConfiguration sessionConfiguration = new SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputConfigurations, getActivity().getMainExecutor(), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    try {
+                        mSession = session;
+                        //设置对焦模式为照片模式下的自动对焦
+                        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
-                                // 人脸检测模式
-                                builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
+                        // 人脸检测模式
+                        builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
 
-                                //预览模式不需要设置监听
-                                session.setRepeatingRequest(builder.build(), null, mHandler);
-                            } catch (CameraAccessException e) {
-                                throw new RuntimeException(e);
-                            }
-                        }
+                        //预览模式不需要设置监听
+                        session.setRepeatingRequest(builder.build(), null, mHandler);
+                    } catch (CameraAccessException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
 
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                        }
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                }
 
-                        @Override
-                        public void onClosed(@NonNull CameraCaptureSession session) {
-                            super.onClosed(session);
-                        }
-                    });
+                @Override
+                public void onClosed(@NonNull CameraCaptureSession session) {
+                    super.onClosed(session);
+                }
+            });
             cameraDevice.createCaptureSession(sessionConfiguration);
         } catch (CameraAccessException e) {
             throw new RuntimeException(e);
@@ -497,58 +483,53 @@ public class TakePicFragment extends MediaFragment {
                 outputConfigurations.add(new OutputConfiguration(surface));
             }
 
-            SessionConfiguration sessionConfiguration = new SessionConfiguration(
-                    SessionConfiguration.SESSION_REGULAR,
-                    outputConfigurations,
-                    getActivity().getMainExecutor(),
-                    new CameraCaptureSession.StateCallback() {
-                        @Override
-                        public void onConfigured(@NonNull CameraCaptureSession session) {
-                            try {
-                                mSession = session;
-                                //设置对焦模式为照片模式下的自动对焦
-                                builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+            SessionConfiguration sessionConfiguration = new SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputConfigurations, getActivity().getMainExecutor(), new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    try {
+                        mSession = session;
+                        //设置对焦模式为照片模式下的自动对焦
+                        builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
-                                //人脸检测模式
-                                builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
+                        //人脸检测模式
+                        builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
 
-                                //设置闪光灯模式
-                                if (mFlashSupported) {
-                                    //经测试 暂时只支持单次闪光模式
-                                    builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
-                                    builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
-                                }
+                        //设置闪光灯模式
+                        if (mFlashSupported) {
+                            //经测试 暂时只支持单次闪光模式
+                            builder.set(CaptureRequest.FLASH_MODE, mFlashMode == FlashMode.ONCE ? CaptureRequest.FLASH_MODE_TORCH : CaptureRequest.FLASH_MODE_OFF);
+                            builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
+                        }
 
-                                //通过屏幕方向偏转照片，保证方向正确
-                                int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
+                        //通过屏幕方向偏转照片，保证方向正确
+                        int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
 
-                                builder.set(CaptureRequest.JPEG_ORIENTATION,
-                                        (Orientations.DEFAULT_ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360);
+                        builder.set(CaptureRequest.JPEG_ORIENTATION, (Orientations.DEFAULT_ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360);
 
-                                //启动拍照
-                                session.capture(builder.build(), new CameraCaptureSession.CaptureCallback() {
-                                    @Override
-                                    public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
-                                        super.onCaptureCompleted(session, request, result);
-                                        //重新开启预览
-                                        createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
-                                    }
-                                }, mHandler);
-                            } catch (CameraAccessException e) {
-                                throw new RuntimeException(e);
+                        //启动拍照
+                        session.capture(builder.build(), new CameraCaptureSession.CaptureCallback() {
+                            @Override
+                            public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                                super.onCaptureCompleted(session, request, result);
+                                //重新开启预览
+                                createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
                             }
-                        }
+                        }, mHandler);
+                    } catch (CameraAccessException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
 
-                        @Override
-                        public void onConfigureFailed(@NonNull CameraCaptureSession session) {
-                        }
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession session) {
+                }
 
-                        @Override
-                        public void onClosed(@NonNull CameraCaptureSession session) {
-                            super.onClosed(session);
-                            captureFinished = true;
-                        }
-                    });
+                @Override
+                public void onClosed(@NonNull CameraCaptureSession session) {
+                    super.onClosed(session);
+                    captureFinished = true;
+                }
+            });
             cameraDevice.createCaptureSession(sessionConfiguration);
         } catch (CameraAccessException e) {
             throw new RuntimeException(e);
@@ -627,7 +608,7 @@ public class TakePicFragment extends MediaFragment {
             mSetupThread = new Thread(() -> {
                 try {
                     mSteps.await();
-                    if(mSetupThread.isInterrupted()){
+                    if (mSetupThread.isInterrupted()) {
                         return;
                     }
                     getActivity().runOnUiThread(() -> {
@@ -642,12 +623,12 @@ public class TakePicFragment extends MediaFragment {
         }
     }
 
-    private void interruptSetUpThread(){
-        if(mSetupThread != null){
+    private void interruptSetUpThread() {
+        if (mSetupThread != null) {
             mSetupThread.interrupt();
             mSetupThread = null;
         }
-        if(mSteps != null){
+        if (mSteps != null) {
             mSteps.countDown();
         }
     }
