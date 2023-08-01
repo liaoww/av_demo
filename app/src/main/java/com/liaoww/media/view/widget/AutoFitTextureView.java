@@ -67,6 +67,7 @@ public class AutoFitTextureView extends TextureView {
         int realWidth = width;
         int realHeight = height;
         if (0 == mRatioWidth || 0 == mRatioHeight) {
+            Log.d("liaoww" , "AutoFitTextureView2 ----  width : " + width + " height : " + height);
             setMeasuredDimension(width, height);
         } else {
             if (width < height * mRatioWidth / mRatioHeight) {

@@ -402,7 +402,7 @@ public class CameraUtil {
     }
 
     public static Matrix previewToCameraTransform(boolean mirrorX, int sensorOrientation,
-                                            RectF previewRect, RectF driverRecF) {
+                                                  RectF previewRect, RectF driverRecF) {
         Matrix transform = new Matrix();
         //如果是前置摄像头，进行水平翻转
         transform.setScale(mirrorX ? -1 : 1, 1);
@@ -438,8 +438,20 @@ public class CameraUtil {
             float scale = Math.max((float) viewHeight / size.getHeight(), (float) viewWidth / size.getWidth());
             matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (rotation - 2), centerX, centerY);
+        } else if (Surface.ROTATION_180 == rotation) {
+            matrix.postRotate(180f, centerX, centerY);
         }
         textureView.setTransform(matrix);
+    }
+
+    public static int clamp(int x, int min, int max) {
+        if (x > max) {
+            return max;
+        }
+        if (x < min) {
+            return min;
+        }
+        return x;
     }
 
 

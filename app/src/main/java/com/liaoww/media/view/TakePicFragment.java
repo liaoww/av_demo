@@ -3,10 +3,10 @@ package com.liaoww.media.view;
 import android.annotation.SuppressLint;
 import android.content.res.Configuration;
 import android.graphics.ImageFormat;
-import android.graphics.SurfaceTexture;
-import android.graphics.RectF;
-import android.graphics.Rect;
 import android.graphics.Matrix;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
@@ -49,6 +49,8 @@ import com.liaoww.media.view.widget.FocusView;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 public class TakePicFragment extends MediaFragment {
     private static final int COLOR_FORMAT = ImageFormat.JPEG;
@@ -58,6 +60,7 @@ public class TakePicFragment extends MediaFragment {
     private CameraDevice mCameraDevice;
 
     private CameraCaptureSession mSession;
+
     private ImageReader mImageReader;
 
     private AutoFitTextureView mTextureView;
@@ -85,7 +88,7 @@ public class TakePicFragment extends MediaFragment {
     private Matrix mSurface2SensorMatrix;
 
     //默认宽高比
-    private Size mDefaultAspectRatio = AspectRatio.AR_4_3;
+    private AspectRatio.AspectRatioSize mDefaultAspectRatio = AspectRatio.AR_4_3;
 
     private String mPath;
 
@@ -97,11 +100,19 @@ public class TakePicFragment extends MediaFragment {
     //闪光灯模式，默认关闭
     private int mFlashMode = FlashMode.OFF;
 
+    /**
+     * A [Semaphore] to prevent the app from exiting before closing the camera.
+     */
+    private Semaphore cameraOpenCloseLock = new Semaphore(1);
+
     private FocusView.FocusListener mListener;
 
     private Thread mSetupThread;
 
     private View mView;
+
+
+    private List<Surface> mPreviewSurfaces;
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -124,6 +135,7 @@ public class TakePicFragment extends MediaFragment {
         mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
         mView = view;
         findViews(view);
+        initAspectRatioButton(view);
         initFocusView(view);
         initTexture();
     }
@@ -140,6 +152,8 @@ public class TakePicFragment extends MediaFragment {
         closeCamera();
         releaseHandler();
         interruptSetUpThread();
+        releaseSurface();
+        Log.e("liaoww", "onPause");
     }
 
     @Override
@@ -151,6 +165,8 @@ public class TakePicFragment extends MediaFragment {
         closeCamera();
         releaseHandler();
         interruptSetUpThread();
+        releaseSurface();
+        Log.e("liaoww", "onDestroy");
     }
 
     @Override
@@ -169,22 +185,6 @@ public class TakePicFragment extends MediaFragment {
             takePic();
         });
 
-        view.findViewById(R.id.aspectRatio_button).setOnClickListener(v -> {
-            if (mDefaultAspectRatio.equals(AspectRatio.AR_4_3)) {
-                mDefaultAspectRatio = AspectRatio.AR_1_1;
-            } else if (mDefaultAspectRatio.equals(AspectRatio.AR_1_1)) {
-                mDefaultAspectRatio = AspectRatio.AR_16_9;
-            } else {
-                mDefaultAspectRatio = AspectRatio.AR_4_3;
-            }
-            //切换宽高比，需要重新创建TextureView
-            interruptSetUpThread();
-            initTexture();
-            closeCamera();
-            releaseHandler();
-            waitingForPrepared();
-        });
-
         mFlashButton = view.findViewById(R.id.flash_button);
         mFlashButton.setOnClickListener(v -> {
             //切换闪光灯模式
@@ -200,6 +200,27 @@ public class TakePicFragment extends MediaFragment {
         });
     }
 
+    private void initAspectRatioButton(View view) {
+        Button aspectRatioButton = view.findViewById(R.id.aspectRatio_button);
+        aspectRatioButton.setText(mDefaultAspectRatio.name);
+        aspectRatioButton.setOnClickListener(v -> {
+            if (mDefaultAspectRatio.equals(AspectRatio.AR_4_3)) {
+                mDefaultAspectRatio = AspectRatio.AR_1_1;
+            } else if (mDefaultAspectRatio.equals(AspectRatio.AR_1_1)) {
+                mDefaultAspectRatio = AspectRatio.AR_16_9;
+            } else {
+                mDefaultAspectRatio = AspectRatio.AR_4_3;
+            }
+            aspectRatioButton.setText(mDefaultAspectRatio.name);
+            //切换宽高比，需要重新创建TextureView
+            interruptSetUpThread();
+            initTexture();
+            closeCamera();
+            releaseHandler();
+            waitingForPrepared();
+        });
+    }
+
     private void initFocusView(View view) {
         mFocusView = view.findViewById(R.id.focus_view);
         if (mListener == null) {
@@ -208,8 +229,8 @@ public class TakePicFragment extends MediaFragment {
                 public void onFocus(float x, float y) {
                     //坐标系转换
                     int areaSize = mWidth / 5;//对焦区域
-                    int left = clamp((int) x - areaSize / 2, 0, mWidth - areaSize);//防止坐标超出范围
-                    int top = clamp((int) y - areaSize / 2, 0, mHeight - areaSize);
+                    int left = CameraUtil.clamp((int) x - areaSize / 2, 0, mWidth - areaSize);//防止坐标超出范围
+                    int top = CameraUtil.clamp((int) y - areaSize / 2, 0, mHeight - areaSize);
                     //使用matrix 转化
                     RectF rectF = CameraUtil.toCameraSpace(new RectF(left, top, left + areaSize, top + areaSize), mSurface2SensorMatrix);
                     //构造
@@ -221,30 +242,30 @@ public class TakePicFragment extends MediaFragment {
         mFocusView.addTouchFocusListener(mListener);
     }
 
-    private int clamp(int x, int min, int max) {
-        if (x > max) {
-            return max;
-        }
-        if (x < min) {
-            return min;
-        }
-        return x;
-    }
-
     @SuppressLint("MissingPermission")
     private void openCamera(CameraManager cameraManager, String cameraId, Handler handler, List<Surface> surfaces) {
+        try {
+            if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MICROSECONDS)) {
+                throw new RuntimeException("Time out waiting to lock camera opening.");
+            }
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
+
         try {
             cameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
-                    Log.d("liaoww", "onOpened");
+                    cameraOpenCloseLock.release();
+                    Log.e("liaoww", "onOpened");
                     mCameraDevice = camera;
                     createCameraPreviewSession(camera, surfaces);
                 }
 
                 @Override
                 public void onDisconnected(@NonNull CameraDevice camera) {
-                    Log.d("liaoww", "onDisconnected");
+                    cameraOpenCloseLock.release();
+                    Log.e("liaoww", "onDisconnected");
                 }
 
                 @Override
@@ -259,6 +280,8 @@ public class TakePicFragment extends MediaFragment {
 
     private void closeCamera() {
         try {
+            cameraOpenCloseLock.acquire();
+
             if (mSession != null) {
                 mSession.close();
                 mSession = null;
@@ -268,8 +291,15 @@ public class TakePicFragment extends MediaFragment {
                 mCameraDevice.close();
                 mCameraDevice = null;
             }
+
+            if (mImageReader != null) {
+                mImageReader.close();
+                mImageReader = null;
+            }
         } catch (Exception e) {
             e.printStackTrace();
+        } finally {
+            cameraOpenCloseLock.release();
         }
     }
 
@@ -316,8 +346,13 @@ public class TakePicFragment extends MediaFragment {
 
     private void releaseHandler() {
         if (mHandlerThread != null) {
-            mHandlerThread.quit();
-            mHandlerThread = null;
+            mHandlerThread.quitSafely();
+            try {
+                mHandlerThread.join();
+                mHandlerThread = null;
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
 
         if (null != mHandler) {
@@ -334,6 +369,7 @@ public class TakePicFragment extends MediaFragment {
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+                Log.e("liaoww", "onSurfaceTextureAvailable : " + width + " / " + height);
                 mWidth = width;
                 mHeight = height;
                 mSteps.countDown();
@@ -341,7 +377,7 @@ public class TakePicFragment extends MediaFragment {
 
             @Override
             public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-                Log.d("liaoww", "onSurfaceTextureSizeChanged : " + width + " / " + height);
+                Log.e("liaoww", "onSurfaceTextureSizeChanged : " + width + " / " + height);
                 if (mFocusView != null) {
                     //更新实际的画面区域
                     mFocusView.post(new Runnable() {
@@ -360,7 +396,7 @@ public class TakePicFragment extends MediaFragment {
             public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
                 Log.d("liaoww", "onSurfaceTextureDestroyed");
 
-                return false;
+                return true;
             }
 
             @Override
@@ -372,7 +408,7 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void setUpAndPreview(int width, int height) {
-        Log.d("liaoww", "setUpAndPreview");
+        Log.e("liaoww", "setUpAndPreview width : " + width + " height : " + height);
         cameraManager = CameraUtil.fetchCameraManager(getActivity());
 
         if (cameraManager != null) {
@@ -386,7 +422,7 @@ public class TakePicFragment extends MediaFragment {
                     StreamConfigurationMap map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
 
                     //找到合适的输出尺寸
-                    Size outputSize = CameraUtil.findTargetSize(map, mDefaultAspectRatio, ImageFormat.JPEG);
+                    Size outputSize = CameraUtil.findTargetSize(map, mDefaultAspectRatio.size, ImageFormat.JPEG);
 
                     //找到合适的预览尺寸
                     mPreviewSize = CameraUtil.findPreviewSize(map, outputSize, orientation == Configuration.ORIENTATION_LANDSCAPE ? new Size(width, height) : new Size(height, width));
@@ -418,7 +454,7 @@ public class TakePicFragment extends MediaFragment {
 
                     openCamera(cameraManager, mCameraId, mHandler, buildPreviewSurface());
                 } catch (CameraAccessException e) {
-                    throw new RuntimeException(e);
+                    e.printStackTrace();
                 }
             }
         }
@@ -587,14 +623,20 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private List<Surface> buildPreviewSurface() {
-        SurfaceTexture surfaceView = mTextureView.getSurfaceTexture();
-        surfaceView.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
-        List<Surface> surfaces = new ArrayList<>();
-        surfaces.add(new Surface(surfaceView));//预览用
-        return surfaces;
+        if (mPreviewSurfaces == null) {
+            mPreviewSurfaces = new ArrayList<>();
+            SurfaceTexture surfaceView = mTextureView.getSurfaceTexture();
+            int previewWidth = mPreviewSize.getWidth();
+            int previewHeight = mPreviewSize.getHeight();
+            Log.e("liaoww", "buildPreviewSurface --- previewWidth : " + previewWidth + "  previewHeight : " + previewHeight);
+            surfaceView.setDefaultBufferSize(previewWidth, previewHeight);
+            mPreviewSurfaces.add(new Surface(surfaceView));//预览用
+        }
+        return mPreviewSurfaces;
     }
 
     private List<Surface> buildCaptureSurface() {
+        Log.e("liaoww", "buildCaptureSurface");
         SurfaceTexture surfaceView = mTextureView.getSurfaceTexture();
         surfaceView.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         List<Surface> surfaces = new ArrayList<>();
@@ -616,9 +658,10 @@ public class TakePicFragment extends MediaFragment {
                     });
 
                 } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    e.printStackTrace();
+                } finally {
+                    Log.e("liaoww", "mSetupThread is TERMINATED");
                 }
-
             });
         }
     }
@@ -631,6 +674,16 @@ public class TakePicFragment extends MediaFragment {
         if (mSteps != null) {
             mSteps.countDown();
         }
+    }
+
+
+    private void releaseSurface() {
+        if (mPreviewSurfaces != null) {
+            for (Surface surface : mPreviewSurfaces) {
+                surface.release();
+            }
+        }
+        mPreviewSurfaces = null;
     }
 
 
