@@ -7,9 +7,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.RectF;
 import android.os.SystemClock;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
@@ -86,6 +86,7 @@ public class FocusView extends View {
                     8,
                     mFramePaint);
         }
+        canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
     }
 
     @Override
@@ -149,6 +150,17 @@ public class FocusView extends View {
             }
         }
         listeners = null;
+    }
+
+
+    float faceLeft, faceTop, faceRight, faceBottom;
+
+    public void updateFaceRect(float left, float top, float right, float bottom, RectF sensorRect) {
+        faceLeft = getWidth() * (left / sensorRect.bottom);
+        faceTop = getHeight() * (top / sensorRect.right);
+        faceRight = getWidth() * (right / sensorRect.bottom);
+        faceBottom = getHeight() * (bottom / sensorRect.right);
+        postInvalidate();
     }
 
     private void notifyTouchFocusListener(float x, float y) {

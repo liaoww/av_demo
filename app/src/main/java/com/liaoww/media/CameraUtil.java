@@ -10,10 +10,12 @@ import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.Image;
 import android.os.Environment;
 import android.util.Log;
+import android.util.Pair;
 import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
@@ -23,6 +25,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.text.Format;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -388,6 +391,23 @@ public class CameraUtil {
         return characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE);
     }
 
+
+    public static Pair<Integer, Integer> findFaceDetectMode(CameraCharacteristics characteristics) {
+        int[] faceDetectModes = characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES);
+        int faceMode = CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF;
+        int maxFaceCount = characteristics.get(CameraCharacteristics.STATISTICS_INFO_MAX_FACE_COUNT);
+        Log.d("liaoww", "maxFaceCount : " + maxFaceCount);
+        if (faceDetectModes != null) {
+            for (int mode : faceDetectModes) {
+                Log.d("liaoww", "faceMode : " + mode);
+                if (faceMode < mode) {
+                    faceMode = mode;
+                }
+            }
+        }
+        return new Pair<>(faceMode, maxFaceCount);
+    }
+
     public static int findSensorOrientation(CameraManager cameraManager, String cameraId) {
         try {
             CameraCharacteristics characteristics = cameraManager.getCameraCharacteristics(cameraId);
@@ -414,6 +434,13 @@ public class CameraUtil {
         fill.setRectToRect(previewRect, driverRecF, Matrix.ScaleToFit.FILL);
         transform.setConcat(fill, transform);
         return transform;
+    }
+
+    public static Matrix face2PreviewTransform(boolean mirror, int sensorOrientation) {
+        Matrix matrix = new Matrix();
+        matrix.setScale(mirror ? -1 : 1, 1);
+        matrix.postRotate(sensorOrientation);
+        return matrix;
     }
 
     public static RectF toCameraSpace(RectF source, Matrix matrix) {
