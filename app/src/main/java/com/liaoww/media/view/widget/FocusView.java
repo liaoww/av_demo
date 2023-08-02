@@ -8,6 +8,9 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.SparseArray;
@@ -15,6 +18,7 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.AccelerateDecelerateInterpolator;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 public class FocusView extends View {
@@ -36,6 +40,12 @@ public class FocusView extends View {
     private ValueAnimator mFocusAnimation;
 
     private SparseArray<FocusListener> listeners;
+
+    private Handler mHandler;
+
+    volatile boolean mHandlerRunning = false;
+
+    boolean mFaceFrameEnable = false;
 
 
     public FocusView(Context context) {
@@ -86,7 +96,9 @@ public class FocusView extends View {
                     8,
                     mFramePaint);
         }
-        canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
+        if(mFaceFrameEnable){
+            canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
+        }
     }
 
     @Override
@@ -150,17 +162,45 @@ public class FocusView extends View {
             }
         }
         listeners = null;
+        mHandler.removeCallbacksAndMessages(null);
+        mHandler = null;
     }
 
 
     float faceLeft, faceTop, faceRight, faceBottom;
+    float lastFaceLeft, lastFaceTop, lastFaceRight, lastFaceBottom;
 
     public void updateFaceRect(float left, float top, float right, float bottom, RectF sensorRect) {
+        mFaceFrameEnable = true;
         faceLeft = getWidth() * (left / sensorRect.bottom);
         faceTop = getHeight() * (top / sensorRect.right);
         faceRight = getWidth() * (right / sensorRect.bottom);
         faceBottom = getHeight() * (bottom / sensorRect.right);
         postInvalidate();
+        doFaceTimeout();
+    }
+
+    private void doFaceTimeout() {
+        if (!mHandlerRunning) {
+            //记录一下当前人脸识别坐标，和300毫秒之后判断是否有变化
+            lastFaceLeft = faceLeft;
+            lastFaceTop = faceTop;
+            lastFaceRight = faceRight;
+            lastFaceBottom = faceBottom;
+            mHandlerRunning = true;
+            mHandler.postDelayed(() -> {
+                mHandlerRunning = false;
+                if (lastFaceLeft == faceLeft && lastFaceTop == faceTop & lastFaceRight == faceRight && lastFaceBottom == faceBottom) {
+                    //人脸识别超时期间 未有新的坐标输入
+                    //隐藏识别框
+                    mFaceFrameEnable = false;
+                    postInvalidate();
+                } else {
+                    //有新的坐标输入，进行下一次检测
+                    doFaceTimeout();
+                }
+            }, 300);
+        }
     }
 
     private void notifyTouchFocusListener(float x, float y) {
@@ -177,6 +217,12 @@ public class FocusView extends View {
         mFramePaint.setColor(mPaintColor);
         mFramePaint.setStrokeWidth(mPaintStrokeWidth);
         mFramePaint.setStyle(Paint.Style.STROKE);
+        mHandler = new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(@NonNull Message msg) {
+                super.handleMessage(msg);
+            }
+        };
     }
 
     private ValueAnimator setUpFocusAnimation() {
