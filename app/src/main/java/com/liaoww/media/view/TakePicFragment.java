@@ -435,7 +435,7 @@ public class TakePicFragment extends MediaFragment {
                     //找到sensor方向
                     mSensorOrientation = CameraUtil.findSensorOrientation(cameraManager, mCameraId);
 
-                    //找到对焦区域
+                    //找到sensor区域(坐标系)
                     sensorAreaRect = new RectF(CameraUtil.findSensorActiveArraySize(characteristics));
 
                     //人脸识别模式
@@ -621,6 +621,8 @@ public class TakePicFragment extends MediaFragment {
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
                     Log.d("liaoww", "对焦完成");
+                    //重新开启预览
+                    createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
                 }
             }, mHandler);
 

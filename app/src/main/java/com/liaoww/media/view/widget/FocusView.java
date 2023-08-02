@@ -95,8 +95,7 @@ public class FocusView extends View {
                     8,
                     8,
                     mFramePaint);
-        }
-        if(mFaceFrameEnable){
+        }else if(mFaceFrameEnable){
             canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
         }
     }
