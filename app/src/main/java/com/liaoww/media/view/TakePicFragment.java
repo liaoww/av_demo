@@ -636,13 +636,37 @@ public class TakePicFragment extends MediaFragment {
             //AF 此处AF和AE用的同一个rect, 实际AE矩形面积比AF稍大, 这样测光效果更好
             builder.set(CaptureRequest.CONTROL_AF_REGIONS, rectangle);
 
+            // 人脸检测模式
+            builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mFaceModeInfo.first);
+
+            //变焦
+            if(mDigitalZoomRect != null){
+                //变焦
+                previewBuilder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
+            }
+
             //给请求添加surface 作为图像输出目标
             for (Surface surface : surfaces) {
                 builder.addTarget(surface);
             }
 
             // AE/AF区域设置通过setRepeatingRequest不断发请求
-            mSession.setRepeatingRequest(builder.build(), null, mHandler);
+            mSession.setRepeatingRequest(builder.build(), new CameraCaptureSession.CaptureCallback() {
+                @Override
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                    super.onCaptureCompleted(session, request, result);
+                    Face[] faces = result.get(CaptureResult.STATISTICS_FACES);
+                    for (Face face : faces) {
+                        RectF out = new RectF();
+                        mFace2SurfaceMatrix.mapRect(out, new RectF(face.getBounds()));
+                        float right = Math.abs(out.left - mSensorAreaRect.bottom);
+                        float bottom = Math.abs(out.top - mSensorAreaRect.right);
+                        float left = Math.abs(out.right - mSensorAreaRect.bottom);
+                        float top = Math.abs(out.bottom - mSensorAreaRect.right);
+                        mFocusView.updateFaceRect(left, top, right, bottom, mSensorAreaRect);
+                    }
+                }
+            }, mHandler);
             //触发对焦
             builder.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
             //触发对焦通过capture发送请求, 因为用户点击屏幕后只需触发一次对焦
@@ -651,8 +675,6 @@ public class TakePicFragment extends MediaFragment {
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
                     Log.d("liaoww", "对焦完成");
-                    //重新开启预览
-                    createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
                 }
             }, mHandler);
 
