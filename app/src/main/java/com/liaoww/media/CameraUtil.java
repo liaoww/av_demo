@@ -421,6 +421,10 @@ public class CameraUtil {
         return characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE);
     }
 
+    public static float findMaxDigitalZoom(CameraCharacteristics characteristics) {
+        return characteristics.get(CameraCharacteristics.SCALER_AVAILABLE_MAX_DIGITAL_ZOOM);
+    }
+
     public static Matrix previewToCameraTransform(boolean mirrorX, int sensorOrientation,
                                                   RectF previewRect, RectF driverRecF) {
         Matrix transform = new Matrix();
@@ -471,7 +475,7 @@ public class CameraUtil {
         textureView.setTransform(matrix);
     }
 
-    public static int clamp(int x, int min, int max) {
+    public static float clamp(float x, float min, float max) {
         if (x > max) {
             return max;
         }
@@ -479,6 +483,27 @@ public class CameraUtil {
             return min;
         }
         return x;
+    }
+
+    /**
+     * 计算变焦缩放rect
+     * @param zoom 缩放系数 0-1
+     * @param maxZoom 最大缩放系数
+     * @param sensorRect sensor有效区域
+     * @return 缩放rect
+     */
+    public static Rect getZoomRect(float zoom, float maxZoom, RectF sensorRect) {
+        zoom = clamp(zoom, 0f, 1f);
+        float calculatedZoom = (zoom * (maxZoom - 1.0f)) + 1.0f;
+        int minW = (int) (sensorRect.width() / maxZoom);
+        int minH = (int) (sensorRect.height() / maxZoom);
+        int difW = (int) (sensorRect.width() - minW);
+        int difH = (int) (sensorRect.height() - minH);
+
+        int cropW = (int) (difW * (calculatedZoom - 1) / (maxZoom - 1) / 2F);
+        int cropH = (int) (difH * (calculatedZoom - 1) / (maxZoom - 1) / 2F);
+        return new Rect(cropW, cropH, (int) (sensorRect.width() - cropW),
+                (int) (sensorRect.height() - cropH));
     }
 
 

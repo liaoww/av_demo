@@ -3,6 +3,7 @@ package com.liaoww.media.view.widget;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -29,12 +30,15 @@ public class FocusView extends View {
     private float mFrameWidth = 256;
 
     private static final float DEFAULT_FRAME_WIDTH = 256;
-    private float mPaintStrokeWidth = 4f;
-    private int mPaintColor = Color.parseColor("#ffffff");
+    private static final float DEFAULT_PAINT_STROKE_WIDTH = 4f;
+    private static final float DEFAULT_ZOOM_TEXT_PAINT_STROKE_WIDTH = 4f;
+    private static final float DEFAULT_ZOOM_TEXT_SIZE = 80f;
+    private static final int DEFAULT_PAINT_COLOR = Color.parseColor("#ffffff");
     private float mDownEventX = 0f;
     private float mDownEventY = 0f;
     private long mDownEventTime = 0L;
     private Paint mFramePaint;
+    private Paint mZoomPaint;
     private boolean mAnimationEnable = false;
 
     private ValueAnimator mFocusAnimation;
@@ -46,6 +50,22 @@ public class FocusView extends View {
     volatile boolean mHandlerRunning = false;
 
     boolean mFaceFrameEnable = false;
+
+    private int mTouchMotionType = 1;//手势模式 1为单指，2为多指
+
+    //一次按下抬起，双指移动距离
+    private float mPointerSpacing = -1;
+
+    //距上一次双指按下，缩放了多少倍
+    private float mScale = 1;
+
+    //缩放尺寸
+    private float mZoomSize = 0f;
+
+    private boolean mZoomSizeEnable = false;
+
+    private float faceLeft, faceTop, faceRight, faceBottom;
+    private float lastFaceLeft, lastFaceTop, lastFaceRight, lastFaceBottom;
 
 
     public FocusView(Context context) {
@@ -95,30 +115,65 @@ public class FocusView extends View {
                     8,
                     8,
                     mFramePaint);
-        }else if(mFaceFrameEnable){
+        } else if (mFaceFrameEnable) {
+            //人脸识别框和点击对焦框互斥
             canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
+        }
+
+
+        if (mZoomSizeEnable) {
+            canvas.drawText( String.format("%.1f", mZoomSize) + "X", getWidth() / 2f, getHeight() / 2f, mZoomPaint);
         }
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        switch (event.getAction()) {
+        switch (event.getAction() & MotionEvent.ACTION_MASK) {
             case MotionEvent.ACTION_DOWN:
+                //单指
+                mTouchMotionType = 1;
                 mDownEventX = event.getX();
                 mDownEventY = event.getY();
                 mDownEventTime = SystemClock.currentThreadTimeMillis();
                 break;
-            case MotionEvent.ACTION_MOVE:
+            case MotionEvent.ACTION_POINTER_DOWN:
+                //多指
+                mTouchMotionType = 2;
+                mPointerSpacing = getPointerSpacing(event.getX(0), event.getY(0), event.getX(1), event.getY(1));
+                getParent().requestDisallowInterceptTouchEvent(true);
                 break;
-            case MotionEvent.ACTION_UP:
-                if (isClick(event.getX(), event.getY())) {
-                    doFrameAnimation();
-                    notifyTouchFocusListener(event.getX(), event.getY());
+            case MotionEvent.ACTION_MOVE:
+                if (mTouchMotionType == 2) {
+                    if (event.getPointerCount() >= 2) {
+                        float currentSpacing = getPointerSpacing(event.getX(0), event.getY(0), event.getX(1), event.getY(1));
+                        notifyZoomListener(currentSpacing / mPointerSpacing - mScale);
+                        mScale = currentSpacing / mPointerSpacing;
+                        mZoomSizeEnable = true;
+                    }
                 }
                 break;
-            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+                if (mTouchMotionType == 1) {
+                    //单指触发对焦
+                    if (isClick(event.getX(), event.getY())) {
+                        doFrameAnimation();
+                        notifyTouchFocusListener(event.getX(), event.getY());
+                    }
+                }
+                mPointerSpacing = -1;
+                mScale = 1;
+                mZoomSizeEnable = false;
+                getParent().requestDisallowInterceptTouchEvent(false);
+                postInvalidate();
                 break;
-
+            case MotionEvent.ACTION_CANCEL:
+                mPointerSpacing = -1;
+                mScale = 1;
+                mZoomSizeEnable = false;
+                getParent().requestDisallowInterceptTouchEvent(false);
+                postInvalidate();
+                break;
         }
         return super.onTouchEvent(event);
     }
@@ -136,6 +191,8 @@ public class FocusView extends View {
 
     public interface FocusListener {
         void onFocus(float x, float y);
+
+        void onZoom(float zoomOffset);
     }
 
     public void addTouchFocusListener(FocusListener listener) {
@@ -166,9 +223,6 @@ public class FocusView extends View {
     }
 
 
-    float faceLeft, faceTop, faceRight, faceBottom;
-    float lastFaceLeft, lastFaceTop, lastFaceRight, lastFaceBottom;
-
     public void updateFaceRect(float left, float top, float right, float bottom, RectF sensorRect) {
         mFaceFrameEnable = true;
         faceLeft = getWidth() * (left / sensorRect.bottom);
@@ -177,6 +231,18 @@ public class FocusView extends View {
         faceBottom = getHeight() * (bottom / sensorRect.right);
         postInvalidate();
         doFaceTimeout();
+    }
+
+    public void setZoomSize(float size) {
+        mZoomSize = size;
+    }
+
+    // 触碰两点间距离
+    private float getPointerSpacing(float pointOneX, float pointOneY, float pointTwoX, float pointTwoY) {
+        //通过三角函数得到两点间的距离
+        float x = pointOneX - pointTwoX;
+        float y = pointOneY - pointTwoY;
+        return (float) Math.sqrt(x * x + y * y);
     }
 
     private void doFaceTimeout() {
@@ -210,12 +276,28 @@ public class FocusView extends View {
         }
     }
 
+    private void notifyZoomListener(float zoom) {
+        if (listeners != null) {
+            for (int i = 0; i < listeners.size(); i++) {
+                listeners.valueAt(i).onZoom(zoom);
+            }
+        }
+    }
+
 
     private void init() {
         mFramePaint = new Paint();
-        mFramePaint.setColor(mPaintColor);
-        mFramePaint.setStrokeWidth(mPaintStrokeWidth);
+        mFramePaint.setColor(DEFAULT_PAINT_COLOR);
+        mFramePaint.setStrokeWidth(DEFAULT_PAINT_STROKE_WIDTH);
         mFramePaint.setStyle(Paint.Style.STROKE);
+
+        mZoomPaint = new Paint();
+        mZoomPaint.setColor(DEFAULT_PAINT_COLOR);
+        mZoomPaint.setStrokeWidth(DEFAULT_ZOOM_TEXT_PAINT_STROKE_WIDTH);
+        mZoomPaint.setTextAlign(Paint.Align.CENTER);
+        mZoomPaint.setTextSize(DEFAULT_ZOOM_TEXT_SIZE);
+        Paint.FontMetrics fontMetrics = mZoomPaint.getFontMetrics();
+
         mHandler = new Handler(Looper.getMainLooper()) {
             @Override
             public void handleMessage(@NonNull Message msg) {
