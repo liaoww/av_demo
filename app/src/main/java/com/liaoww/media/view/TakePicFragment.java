@@ -111,7 +111,7 @@ public class TakePicFragment extends MediaFragment {
 
     private float mDigitalZoomMax = 0f;
 
-    private float mCurrentZoom = 0f;
+    private float mCurrentDigitalZoom = 0f;
 
     private Semaphore cameraOpenCloseLock = new Semaphore(1);
 
@@ -248,9 +248,9 @@ public class TakePicFragment extends MediaFragment {
 
                 @Override
                 public void onZoom(float zoomOffset) {
-                    mCurrentZoom = CameraUtil.clamp(mCurrentZoom + zoomOffset, 0f, 1f);
-                    digitalZoom(mCurrentZoom);
-                    mFocusView.setZoomSize(mCurrentZoom * mDigitalZoomMax);
+                    mCurrentDigitalZoom = CameraUtil.clamp(mCurrentDigitalZoom + zoomOffset, 0f, 1f);
+                    digitalZoom(mCurrentDigitalZoom);
+                    mFocusView.setZoomSize(mCurrentDigitalZoom * mDigitalZoomMax);
                     mFocusView.postInvalidate();
                 }
             };
@@ -473,6 +473,11 @@ public class TakePicFragment extends MediaFragment {
 
                     mImageReader = initImageReader(outputSize.getWidth(), outputSize.getHeight(), mHandler);
 
+                    
+                    //初始化变焦
+                    mDigitalZoomRect = null;
+                    mCurrentDigitalZoom = 0f;
+
                     openCamera(mCameraManager, mCameraId, mHandler, buildPreviewSurface());
                 } catch (CameraAccessException e) {
                     e.printStackTrace();
@@ -553,7 +558,7 @@ public class TakePicFragment extends MediaFragment {
             closePreviewSession();
             List<OutputConfiguration> outputConfigurations = new ArrayList<>();
             //TEMPLATE_ZERO_SHUTTER_LAG : 创建一个适用于零快门延迟的请求。在不影响预览帧率的情况下最大化图像质量
-            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+            CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
 
             //给请求添加surface 作为图像输出目标
             for (Surface surface : surfaces) {
