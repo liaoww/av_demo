@@ -251,7 +251,6 @@ public class TakePicFragment extends MediaFragment {
                     mCurrentDigitalZoom = CameraUtil.clamp(mCurrentDigitalZoom + zoomOffset, 0f, 1f);
                     digitalZoom(mCurrentDigitalZoom);
                     mFocusView.setZoomSize(mCurrentDigitalZoom * mDigitalZoomMax);
-                    mFocusView.postInvalidate();
                 }
             };
         }
@@ -642,7 +641,7 @@ public class TakePicFragment extends MediaFragment {
             //变焦
             if(mDigitalZoomRect != null){
                 //变焦
-                previewBuilder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
+                builder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
             }
 
             //给请求添加surface 作为图像输出目标

@@ -235,6 +235,7 @@ public class FocusView extends View {
 
     public void setZoomSize(float size) {
         mZoomSize = size;
+        postInvalidate();
     }
 
     // 触碰两点间距离
