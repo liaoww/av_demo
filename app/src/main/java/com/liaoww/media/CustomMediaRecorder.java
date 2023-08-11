@@ -58,13 +58,21 @@ public class CustomMediaRecorder {
 
     public void startRecorder() {
         if (mMediaRecorder != null) {
-            mMediaRecorder.start();
+            try {
+                mMediaRecorder.start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 
     public void stopRecorder() {
         if (mMediaRecorder != null) {
-            mMediaRecorder.stop();
+            try {
+                mMediaRecorder.stop();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
             mMediaRecorder.reset();
         }
     }
