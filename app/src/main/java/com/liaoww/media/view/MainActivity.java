@@ -41,7 +41,6 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViews();
-        initPager();
         requestPermission(permissions);
     }
 
@@ -54,7 +53,7 @@ public class MainActivity extends AppCompatActivity {
                 granted |= r;
             }
             if (granted == PackageManager.PERMISSION_GRANTED) {
-                mAdapter.permissionGranted();
+                initPager();
             } else {
                 Toast.makeText(MainActivity.this, "权限被拒绝,功能可能不完整", Toast.LENGTH_SHORT).show();
                 finish();

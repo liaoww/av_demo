@@ -27,6 +27,7 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -79,6 +80,8 @@ public class RecorderFragment extends MediaFragment {
 
     private Size mRangeSize = new Size(1920, 1080);
 
+    private LinearLayout mContainer;
+
     public static RecorderFragment of() {
         return new RecorderFragment();
     }
@@ -94,22 +97,27 @@ public class RecorderFragment extends MediaFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output.mp4";
-        initTexture(view);
         findViews(view);
+        initTexture();
     }
 
     @Override
     public void onResume() {
         super.onResume();
-        waitingForPrepared();
+        if(mTextureView == null){
+            initTexture();
+        }
+        Log.e("liaoww", "onResume2");
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        Log.e("liaoww", "onPause2");
         FFmpeg.releaseEncoder();
         closeCamera();
         releaseHandler();
+        removeTexture();
     }
 
     private void findViews(View view) {
@@ -135,6 +143,7 @@ public class RecorderFragment extends MediaFragment {
                 }
             }
         });
+        mContainer = view.findViewById(R.id.surface_container);
     }
 
     private void initMediaRecorder() {
@@ -146,25 +155,28 @@ public class RecorderFragment extends MediaFragment {
         mMediaRecorder.init(mPath, size.getWidth(), size.getHeight(), CameraUtil.findSensorOrientation(cameraManager, mCameraId), rotation);
     }
 
-    private void initTexture(View view) {
-        mTextureView = view.findViewById(R.id.texture_view);
+    private void initTexture() {
+        removeTexture();
+        mTextureView = null;
+        mTextureView = new AutoFitTextureView(getActivity().getApplicationContext());
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
             public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
+                Log.e("liaoww", "onSurfaceTextureAvailable2");
                 mWidth = width;
                 mHeight = height;
-                mSteps.countDown();
+                startPreview(mWidth, mHeight);
             }
 
             @Override
             public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture surface, int width, int height) {
-                Log.d("liaoww", "onSurfaceTextureSizeChanged");
+                Log.e("liaoww", "onSurfaceTextureSizeChanged");
 
             }
 
             @Override
             public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture surface) {
-                Log.d("liaoww", "onSurfaceTextureDestroyed");
+                Log.e("liaoww", "onSurfaceTextureDestroyed");
 
                 return false;
             }
@@ -174,21 +186,12 @@ public class RecorderFragment extends MediaFragment {
 
             }
         });
+        mContainer.addView(mTextureView);
     }
 
-    private void waitingForPrepared() {
-        new Thread(() -> {
-            try {
-                mSteps.await();
-                getActivity().runOnUiThread(() -> {
-                    startPreview(mWidth, mHeight);
-                });
-
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-
-        }).start();
+    private void removeTexture(){
+        mContainer.removeAllViews();
+        mTextureView = null;
     }
 
     private void startPreview(int width, int height) {
@@ -214,7 +217,7 @@ public class RecorderFragment extends MediaFragment {
 
                 mImageReader = initImageReader(mWidth, mHeight, mHandler);
 
-                openCamera(cameraManager, mCameraId, mHandler, buildPreviewSurface());
+                openCamera(cameraManager, mCameraId, mHandler);
             }
         }
     }
@@ -268,14 +271,14 @@ public class RecorderFragment extends MediaFragment {
     }
 
     @SuppressLint("MissingPermission")
-    private void openCamera(CameraManager cameraManager, String cameraId, Handler handler, List<Surface> surfaces) {
+    private void openCamera(CameraManager cameraManager, String cameraId, Handler handler) {
         try {
             cameraManager.openCamera(cameraId, new CameraDevice.StateCallback() {
                 @Override
                 public void onOpened(@NonNull CameraDevice camera) {
                     Log.d("liaoww", "onOpened");
                     mCameraDevice = camera;
-                    createCameraPreviewSession(camera, surfaces);
+                    createCameraPreviewSession(camera, buildPreviewSurface());
                 }
 
                 @Override

@@ -42,14 +42,6 @@ public class FragmentAdapter extends FragmentStateAdapter {
         init();
     }
 
-    public void permissionGranted() {
-        if (fragments != null) {
-            for (IFragment fragment : fragments) {
-                fragment.permissionGranted();
-            }
-        }
-    }
-
     public IFragment getFragmentByPosition(int position) {
         return fragments.get(position);
     }

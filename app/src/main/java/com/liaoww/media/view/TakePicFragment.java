@@ -117,9 +117,7 @@ public class TakePicFragment extends MediaFragment {
 
     private FocusView.FocusListener mListener;
 
-    private Thread mSetupThread;
-
-    private View mView;
+    private LinearLayout mContainer;
 
     private Rect mDigitalZoomRect;
 
@@ -143,7 +141,6 @@ public class TakePicFragment extends MediaFragment {
         super.onViewCreated(view, savedInstanceState);
 //        mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
         mPath = getContext().getFilesDir().getAbsolutePath() + "/";
-        mView = view;
         findViews(view);
         initAspectRatioButton(view);
         initFocusView(view);
@@ -153,16 +150,19 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onResume() {
         super.onResume();
-        waitingForPrepared();
+        Log.e("liaoww", "onResume");
+        if(mTextureView == null){
+            initTexture();
+        }
     }
 
     @Override
     public void onPause() {
         super.onPause();
+        Log.e("liaoww", "onPause");
         closeCamera();
         releaseHandler();
-        interruptSetUpThread();
-        Log.e("liaoww", "onPause");
+        removeTexture();
     }
 
     @Override
@@ -173,7 +173,6 @@ public class TakePicFragment extends MediaFragment {
         }
         closeCamera();
         releaseHandler();
-        interruptSetUpThread();
         Log.e("liaoww", "onDestroy");
     }
 
@@ -206,6 +205,7 @@ public class TakePicFragment extends MediaFragment {
                 }
             }
         });
+        mContainer = view.findViewById(R.id.surface_container);
     }
 
     private void initAspectRatioButton(View view) {
@@ -221,11 +221,9 @@ public class TakePicFragment extends MediaFragment {
             }
             aspectRatioButton.setText(mDefaultAspectRatio.name);
             //切换宽高比，需要重新创建TextureView
-            interruptSetUpThread();
             initTexture();
             closeCamera();
             releaseHandler();
-            waitingForPrepared();
         });
     }
 
@@ -258,7 +256,7 @@ public class TakePicFragment extends MediaFragment {
     }
 
     @SuppressLint("MissingPermission")
-    private void openCamera(CameraManager cameraManager, String cameraId, Handler handler, List<Surface> surfaces) {
+    private void openCamera(CameraManager cameraManager, String cameraId, Handler handler) {
         try {
             if (!cameraOpenCloseLock.tryAcquire(2500, TimeUnit.MICROSECONDS)) {
                 throw new RuntimeException("Time out waiting to lock camera opening.");
@@ -274,7 +272,7 @@ public class TakePicFragment extends MediaFragment {
                     cameraOpenCloseLock.release();
                     Log.e("liaoww", "onOpened");
                     mCameraDevice = camera;
-                    createCameraPreviewSession(camera, surfaces);
+                    createCameraPreviewSession(camera, buildPreviewSurface());
                 }
 
                 @Override
@@ -377,9 +375,7 @@ public class TakePicFragment extends MediaFragment {
     }
 
     private void initTexture() {
-        LinearLayout container = mView.findViewById(R.id.surface_container);
-        container.removeAllViews();
-        mTextureView = null;
+        removeTexture();
         mTextureView = new AutoFitTextureView(getActivity().getApplicationContext());
         mTextureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
             @Override
@@ -387,7 +383,7 @@ public class TakePicFragment extends MediaFragment {
                 Log.e("liaoww", "onSurfaceTextureAvailable : " + width + " / " + height);
                 mWidth = width;
                 mHeight = height;
-                mSteps.countDown();
+                setUpAndPreview(mWidth,mHeight);
             }
 
             @Override
@@ -416,7 +412,12 @@ public class TakePicFragment extends MediaFragment {
 
             }
         });
-        container.addView(mTextureView);
+        mContainer.addView(mTextureView);
+    }
+
+    private void removeTexture(){
+        mContainer.removeAllViews();
+        mTextureView = null;
     }
 
     private void setUpAndPreview(int width, int height) {
@@ -477,7 +478,7 @@ public class TakePicFragment extends MediaFragment {
                     mDigitalZoomRect = null;
                     mCurrentDigitalZoom = 0f;
 
-                    openCamera(mCameraManager, mCameraId, mHandler, buildPreviewSurface());
+                    openCamera(mCameraManager, mCameraId, mHandler);
                 } catch (CameraAccessException e) {
                     e.printStackTrace();
                 }
@@ -734,41 +735,5 @@ public class TakePicFragment extends MediaFragment {
         surfaces.add(new Surface(surfaceView));//预览用
         surfaces.add(mImageReader.getSurface());//捕获拍照数据
         return surfaces;
-    }
-
-    private void setUpThread() {
-        if (mSetupThread == null) {
-            mSetupThread = new Thread(() -> {
-                try {
-                    mSteps.await();
-                    if (mSetupThread.isInterrupted()) {
-                        return;
-                    }
-                    getActivity().runOnUiThread(() -> {
-                        setUpAndPreview(mWidth, mHeight);
-                    });
-
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                } finally {
-                    Log.e("liaoww", "mSetupThread is TERMINATED");
-                }
-            });
-        }
-    }
-
-    private void interruptSetUpThread() {
-        if (mSetupThread != null) {
-            mSetupThread.interrupt();
-            mSetupThread = null;
-        }
-        if (mSteps != null) {
-            mSteps.countDown();
-        }
-    }
-
-    private void waitingForPrepared() {
-        setUpThread();
-        mSetupThread.start();
     }
 }
