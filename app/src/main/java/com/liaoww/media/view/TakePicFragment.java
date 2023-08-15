@@ -57,69 +57,50 @@ import java.util.concurrent.TimeUnit;
 public class TakePicFragment extends MediaFragment {
     private static final int COLOR_FORMAT = ImageFormat.JPEG;
 
+    //camera相关
     private CameraManager mCameraManager;
-
     private CameraDevice mCameraDevice;
-
     private CameraCaptureSession mSession;
-
     private CaptureRequest.Builder previewBuilder;
-
     private ImageReader mImageReader;
 
+    //view相关
     private AutoFitTextureView mTextureView;
-
-    private Size mPreviewSize;
-
-    private String mCameraId;
-
-    private HandlerThread mHandlerThread;
-
-    private Handler mHandler;
-
     private Button mFlashButton;
-
     private FocusView mFocusView;
+    private LinearLayout mContainer;
+    private FocusView.FocusListener mListener;
 
-    private int mWidth, mHeight;
 
-    private int mSensorOrientation;
-
-    //相机预览区域坐标系
-    private RectF mSensorAreaRect;
-
-    //渲染区域坐标 - 相机坐标系
-    private Matrix mSurface2SensorMatrix;
-
-    private Matrix mFace2SurfaceMatrix;
-
-    //默认宽高比
-    private AspectRatio.AspectRatioSize mDefaultAspectRatio = AspectRatio.AR_4_3;
-
-    private String mPath;
-
-    //拍照是否完成
-    private volatile boolean captureFinished = true;
-
-    private boolean mFlashSupported = false;
-
-    //闪光灯模式，默认关闭
-    private int mFlashMode = FlashMode.OFF;
-
+    //camera相关参数配置
+    private Size mPreviewSize;//预览尺寸
+    private String mCameraId;//相机id(前后置)
+    private int mSurfaceWidth, mSurfaceHeight;
+    private int mSensorOrientation;//相机预览区域坐标系
+    private RectF mSensorAreaRect;//渲染区域坐标 - 相机坐标系
+    private Matrix mSurface2SensorMatrix;//sensor坐标系转换到当前屏幕surface
+    private Matrix mFace2SurfaceMatrix;//人脸区域转换matrix
+    private AspectRatio.AspectRatioSize mDefaultAspectRatio = AspectRatio.AR_4_3;//默认宽高比
+    private String mPictureOutputPath;//拍照输出路径
     //人脸识别信息，first 是支持的人脸识别 mode ，second 是最大人脸个数
     private Pair<Integer, Integer> mFaceModeInfo = new Pair<>(CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF, 0);
 
-    private float mDigitalZoomMax = 0f;
+    //变焦相关
+    private float mDigitalZoomMax = 0f;//数码变焦最大倍数
+    private float mCurrentDigitalZoom = 0f;//当前变焦倍数
+    private Rect mDigitalZoomRect;//数码变焦rect
 
-    private float mCurrentDigitalZoom = 0f;
+    //开关配置
+    private volatile boolean captureFinished = true;//拍照是否完成
+    private boolean mFlashSupported = false;//闪光灯是否支持(前置相机不支持)
+    private int mFlashMode = FlashMode.OFF;//闪光灯模式，默认关闭
 
-    private Semaphore cameraOpenCloseLock = new Semaphore(1);
 
-    private FocusView.FocusListener mListener;
+    //线程相关
+    private HandlerThread mHandlerThread;
+    private Handler mHandler;
+    private final Semaphore cameraOpenCloseLock = new Semaphore(1);
 
-    private LinearLayout mContainer;
-
-    private Rect mDigitalZoomRect;
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -139,8 +120,7 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-//        mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output";
-        mPath = getContext().getFilesDir().getAbsolutePath() + "/";
+        mPictureOutputPath = getContext().getFilesDir().getAbsolutePath() + "/";
         findViews(view);
         initAspectRatioButton(view);
         initFocusView(view);
@@ -150,8 +130,7 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onResume() {
         super.onResume();
-        Log.e("liaoww", "onResume");
-        if(mTextureView == null){
+        if (mTextureView == null) {
             initTexture();
         }
     }
@@ -159,7 +138,6 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onPause() {
         super.onPause();
-        Log.e("liaoww", "onPause");
         closeCamera();
         releaseHandler();
         removeTexture();
@@ -173,7 +151,7 @@ public class TakePicFragment extends MediaFragment {
         }
         closeCamera();
         releaseHandler();
-        Log.e("liaoww", "onDestroy");
+        removeTexture();
     }
 
     @Override
@@ -182,7 +160,7 @@ public class TakePicFragment extends MediaFragment {
         if (isResumed()) {
             closeCamera();
             releaseHandler();
-            setUpAndPreview(mWidth, mHeight);
+            startPreview(mSurfaceWidth, mSurfaceHeight);
         }
     }
 
@@ -221,9 +199,9 @@ public class TakePicFragment extends MediaFragment {
             }
             aspectRatioButton.setText(mDefaultAspectRatio.name);
             //切换宽高比，需要重新创建TextureView
-            initTexture();
             closeCamera();
             releaseHandler();
+            initTexture();
         });
     }
 
@@ -234,9 +212,9 @@ public class TakePicFragment extends MediaFragment {
                 @Override
                 public void onFocus(float x, float y) {
                     //坐标系转换
-                    int areaSize = mWidth / 5;//对焦区域
-                    int left = (int) CameraUtil.clamp(x - areaSize / 2f, 0f, mWidth - areaSize);//防止坐标超出范围
-                    int top = (int) CameraUtil.clamp(y - areaSize / 2f, 0f, mHeight - areaSize);
+                    int areaSize = mSurfaceWidth / 5;//对焦区域
+                    int left = (int) CameraUtil.clamp(x - areaSize / 2f, 0f, mSurfaceWidth - areaSize);//防止坐标超出范围
+                    int top = (int) CameraUtil.clamp(y - areaSize / 2f, 0f, mSurfaceHeight - areaSize);
                     //使用matrix 转化
                     RectF rectF = CameraUtil.toCameraSpace(new RectF(left, top, left + areaSize, top + areaSize), mSurface2SensorMatrix);
                     //构造
@@ -295,10 +273,7 @@ public class TakePicFragment extends MediaFragment {
         try {
             cameraOpenCloseLock.acquire();
 
-            if (mSession != null) {
-                mSession.close();
-                mSession = null;
-            }
+            closeSession();
 
             if (mCameraDevice != null) {
                 mCameraDevice.close();
@@ -313,6 +288,13 @@ public class TakePicFragment extends MediaFragment {
             e.printStackTrace();
         } finally {
             cameraOpenCloseLock.release();
+        }
+    }
+
+    private void closeSession() {
+        if (mSession != null) {
+            mSession.close();
+            mSession = null;
         }
     }
 
@@ -332,7 +314,7 @@ public class TakePicFragment extends MediaFragment {
                     byte[] data = new byte[buffer.remaining()];
                     buffer.get(data);
                     image.close();
-                    String outputPath = CameraUtil.saveJpeg2File(data, mPath);
+                    String outputPath = CameraUtil.saveJpeg2File(data, mPictureOutputPath);
                     if (outputPath != null) {
                         //保存成功之后，弹窗显示
                         PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(), "pic");
@@ -381,9 +363,9 @@ public class TakePicFragment extends MediaFragment {
             @Override
             public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surface, int width, int height) {
                 Log.e("liaoww", "onSurfaceTextureAvailable : " + width + " / " + height);
-                mWidth = width;
-                mHeight = height;
-                setUpAndPreview(mWidth,mHeight);
+                mSurfaceWidth = width;
+                mSurfaceHeight = height;
+                startPreview(mSurfaceWidth, mSurfaceHeight);
             }
 
             @Override
@@ -415,12 +397,12 @@ public class TakePicFragment extends MediaFragment {
         mContainer.addView(mTextureView);
     }
 
-    private void removeTexture(){
+    private void removeTexture() {
         mContainer.removeAllViews();
         mTextureView = null;
     }
 
-    private void setUpAndPreview(int width, int height) {
+    private void startPreview(int width, int height) {
         Log.e("liaoww", "setUpAndPreview width : " + width + " height : " + height);
         mCameraManager = CameraUtil.fetchCameraManager(getActivity());
 
@@ -457,7 +439,7 @@ public class TakePicFragment extends MediaFragment {
                     mDigitalZoomMax = CameraUtil.findMaxDigitalZoom(characteristics);
 
                     //切换摄像头之后需要重新计算一下坐标转换matrix
-                    mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(mFacingId == CameraCharacteristics.LENS_FACING_FRONT, mSensorOrientation, new RectF(0, 0, mWidth, mHeight), mSensorAreaRect);
+                    mSurface2SensorMatrix = CameraUtil.previewToCameraTransform(mFacingId == CameraCharacteristics.LENS_FACING_FRONT, mSensorOrientation, new RectF(0, 0, mSurfaceWidth, mSurfaceHeight), mSensorAreaRect);
 
                     mFace2SurfaceMatrix = CameraUtil.face2PreviewTransform(mFacingId == CameraCharacteristics.LENS_FACING_FRONT, mSensorOrientation);
 
@@ -473,7 +455,7 @@ public class TakePicFragment extends MediaFragment {
 
                     mImageReader = initImageReader(outputSize.getWidth(), outputSize.getHeight(), mHandler);
 
-                    
+
                     //初始化变焦
                     mDigitalZoomRect = null;
                     mCurrentDigitalZoom = 0f;
@@ -488,7 +470,7 @@ public class TakePicFragment extends MediaFragment {
 
     private void createCameraPreviewSession(CameraDevice cameraDevice, List<Surface> surfaces) {
         try {
-            closePreviewSession();
+            closeSession();
             List<OutputConfiguration> outputConfigurations = new ArrayList<>();
             //TEMPLATE_PREVIEW : 创建预览的请求
             previewBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
@@ -510,7 +492,7 @@ public class TakePicFragment extends MediaFragment {
                         // 人脸检测模式
                         previewBuilder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mFaceModeInfo.first);
 
-                        if(mDigitalZoomRect != null){
+                        if (mDigitalZoomRect != null) {
                             //变焦
                             previewBuilder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
                         }
@@ -555,7 +537,7 @@ public class TakePicFragment extends MediaFragment {
 
     private void createCameraCaptureSession(CameraDevice cameraDevice, List<Surface> surfaces) {
         try {
-            closePreviewSession();
+            closeSession();
             List<OutputConfiguration> outputConfigurations = new ArrayList<>();
             //TEMPLATE_ZERO_SHUTTER_LAG : 创建一个适用于零快门延迟的请求。在不影响预览帧率的情况下最大化图像质量
             CaptureRequest.Builder builder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_ZERO_SHUTTER_LAG);
@@ -575,7 +557,7 @@ public class TakePicFragment extends MediaFragment {
                         builder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
 
                         //人脸检测模式
-                        builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_SIMPLE);
+                        builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_OFF);
 
                         //设置闪光灯模式
                         if (mFlashSupported) {
@@ -589,7 +571,7 @@ public class TakePicFragment extends MediaFragment {
 
                         builder.set(CaptureRequest.JPEG_ORIENTATION, (Orientations.DEFAULT_ORIENTATIONS.get(rotation) + mSensorOrientation + 270) % 360);
 
-                        if(mDigitalZoomRect != null){
+                        if (mDigitalZoomRect != null) {
                             //变焦
                             builder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
                         }
@@ -640,7 +622,7 @@ public class TakePicFragment extends MediaFragment {
             builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mFaceModeInfo.first);
 
             //变焦
-            if(mDigitalZoomRect != null){
+            if (mDigitalZoomRect != null) {
                 //变焦
                 builder.set(CaptureRequest.SCALER_CROP_REGION, mDigitalZoomRect);
             }
@@ -709,26 +691,15 @@ public class TakePicFragment extends MediaFragment {
         }
     }
 
-    private void closePreviewSession() {
-        if (mSession != null) {
-            mSession.close();
-            mSession = null;
-        }
-    }
-
     private List<Surface> buildPreviewSurface() {
         SurfaceTexture surfaceView = mTextureView.getSurfaceTexture();
-        int previewWidth = mPreviewSize.getWidth();
-        int previewHeight = mPreviewSize.getHeight();
-        Log.e("liaoww", "buildPreviewSurface --- previewWidth : " + previewWidth + "  previewHeight : " + previewHeight);
-        surfaceView.setDefaultBufferSize(previewWidth, previewHeight);
+        surfaceView.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         List<Surface> surfaces = new ArrayList<>();
         surfaces.add(new Surface(surfaceView));//预览用
         return surfaces;
     }
 
     private List<Surface> buildCaptureSurface() {
-        Log.e("liaoww", "buildCaptureSurface");
         SurfaceTexture surfaceView = mTextureView.getSurfaceTexture();
         surfaceView.setDefaultBufferSize(mPreviewSize.getWidth(), mPreviewSize.getHeight());
         List<Surface> surfaces = new ArrayList<>();

@@ -26,9 +26,7 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String[] permissions = {
             Manifest.permission.CAMERA,
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.READ_EXTERNAL_STORAGE,
-            Manifest.permission.WRITE_EXTERNAL_STORAGE};
+            Manifest.permission.RECORD_AUDIO};
 
     private TabLayout mTabLayout;
     private ViewPager2 mViewPager;
@@ -64,7 +62,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mTabLayoutMediator.detach();
+        if(mTabLayoutMediator != null){
+            mTabLayoutMediator.detach();
+        }
     }
 
     private void findViews() {
