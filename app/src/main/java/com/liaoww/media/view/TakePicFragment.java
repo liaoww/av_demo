@@ -42,6 +42,7 @@ import androidx.annotation.Nullable;
 
 import com.liaoww.media.AspectRatio;
 import com.liaoww.media.CameraUtil;
+import com.liaoww.media.FileUtil;
 import com.liaoww.media.FlashMode;
 import com.liaoww.media.Orientations;
 import com.liaoww.media.R;
@@ -81,7 +82,6 @@ public class TakePicFragment extends MediaFragment {
     private Matrix mSurface2SensorMatrix;//sensor坐标系转换到当前屏幕surface
     private Matrix mFace2SurfaceMatrix;//人脸区域转换matrix
     private AspectRatio.AspectRatioSize mDefaultAspectRatio = AspectRatio.AR_4_3;//默认宽高比
-    private String mPictureOutputPath;//拍照输出路径
     //人脸识别信息，first 是支持的人脸识别 mode ，second 是最大人脸个数
     private Pair<Integer, Integer> mFaceModeInfo = new Pair<>(CaptureRequest.STATISTICS_FACE_DETECT_MODE_OFF, 0);
 
@@ -120,7 +120,6 @@ public class TakePicFragment extends MediaFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        mPictureOutputPath = getContext().getFilesDir().getAbsolutePath() + "/";
         findViews(view);
         initAspectRatioButton(view);
         initFocusView(view);
@@ -314,7 +313,7 @@ public class TakePicFragment extends MediaFragment {
                     byte[] data = new byte[buffer.remaining()];
                     buffer.get(data);
                     image.close();
-                    String outputPath = CameraUtil.saveJpeg2File(data, mPictureOutputPath);
+                    String outputPath = FileUtil.saveJpeg2File(data, FileUtil.getPictureRootPath(getContext()));
                     if (outputPath != null) {
                         //保存成功之后，弹窗显示
                         PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(), "pic");

@@ -507,17 +507,6 @@ public class CameraUtil {
     }
 
 
-    public static String saveJpeg2File(byte[] data, String path) {
-        String realPath = path + "-" + System.currentTimeMillis() + ".jpg";
-        try (FileOutputStream fileOutputStream = new FileOutputStream(new File(realPath))) {
-            fileOutputStream.write(data);
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-        return realPath;
-    }
-
     public static void testFFmpeg() {
         String mPath = Environment.getExternalStorageDirectory().getAbsolutePath() + "/output.mp4";
         String mTest = Environment.getExternalStorageDirectory().getAbsolutePath() + "/akiyo_cif.yuv";

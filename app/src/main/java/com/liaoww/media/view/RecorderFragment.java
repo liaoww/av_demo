@@ -45,10 +45,12 @@ import com.liaoww.media.AspectRatio;
 import com.liaoww.media.CameraUtil;
 import com.liaoww.media.CustomMediaRecorder;
 import com.liaoww.media.FFmpeg;
+import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
 import com.liaoww.media.view.widget.AutoFitTextureView;
 import com.liaoww.media.view.widget.FocusView;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -80,7 +82,6 @@ public class RecorderFragment extends MediaFragment {
     private RectF mSensorAreaRect;//相机预览区域坐标系
     private Matrix mSurface2SensorMatrix;//渲染区域坐标 - 相机坐标系
     private Matrix mFace2SurfaceMatrix;//人脸坐标系转换matrix
-    private String mVideoOutputPath;
     private final AspectRatio.AspectRatioSize mDefaultAspectRatio = AspectRatio.AR_16_9;//默认宽高比
     private final Size mOutputRangeSize = new Size(1920, 1080);//输出视频最大尺寸
     //人脸识别信息，first 是支持的人脸识别 mode ，second 是最大人脸个数
@@ -117,7 +118,6 @@ public class RecorderFragment extends MediaFragment {
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-        mVideoOutputPath = getContext().getFilesDir().getAbsolutePath() + "/output.mp4";
         findViews(view);
         initTexture();
         initFocusView(view);
@@ -189,7 +189,7 @@ public class RecorderFragment extends MediaFragment {
         }
         Size size = CameraUtil.findTargetSize(mCameraManager, mCameraId, mDefaultAspectRatio.size, mOutputRangeSize, MediaRecorder.class);
         int rotation = getActivity().getWindowManager().getDefaultDisplay().getRotation();
-        mMediaRecorder.init(mVideoOutputPath, size.getWidth(), size.getHeight(), CameraUtil.findSensorOrientation(mCameraManager, mCameraId), rotation);
+        mMediaRecorder.init(FileUtil.getVideoOutputPath(getContext()), size.getWidth(), size.getHeight(), CameraUtil.findSensorOrientation(mCameraManager, mCameraId), rotation);
     }
 
     private void initTexture() {
@@ -337,7 +337,7 @@ public class RecorderFragment extends MediaFragment {
                     if (mEncoderRunning) {
                         byte[] yuv = CameraUtil.toYuvImage(image);
                         if (mEncoderRunning) {
-                            FFmpeg.yuv2Mp4(mVideoOutputPath, yuv, yuv.length, image.getWidth(), image.getHeight());
+                            FFmpeg.yuv2Mp4(FileUtil.getVideoOutputPath(getContext()), yuv, yuv.length, image.getWidth(), image.getHeight());
                         }
                     }
                     image.close();
@@ -553,8 +553,7 @@ public class RecorderFragment extends MediaFragment {
             builder.set(CaptureRequest.CONTROL_AF_REGIONS, rectangle);
 
             // 人脸检测模式
-            builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE,
-                    mEncoderRunning ? CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_OFF : mFaceModeInfo.first);
+            builder.set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, mEncoderRunning ? CameraCharacteristics.STATISTICS_FACE_DETECT_MODE_OFF : mFaceModeInfo.first);
 
             //变焦
             if (mDigitalZoomRect != null) {
