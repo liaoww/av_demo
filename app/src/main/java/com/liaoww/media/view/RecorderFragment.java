@@ -185,7 +185,9 @@ public class RecorderFragment extends MediaFragment {
         mEncoderRunning = false;
 //                    FFmpeg.releaseEncoder();
         mStartButton.setText("开始录制");
-        mMediaRecorder.stopRecorder();
+        if(mMediaRecorder != null){
+            mMediaRecorder.stopRecorder();
+        }
         if (!release) {
             createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
         }

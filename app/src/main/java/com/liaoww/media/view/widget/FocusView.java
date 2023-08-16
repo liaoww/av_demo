@@ -27,19 +27,24 @@ public class FocusView extends View {
 
     private int mEffectiveHeight = -1;
 
-    private float mFrameWidth = 256;
+    private float mFocusFrameWidth = DEFAULT_FRAME_WIDTH;
 
     private static final float DEFAULT_FRAME_WIDTH = 256;
-    private static final float DEFAULT_PAINT_STROKE_WIDTH = 4f;
+    private static final float DEFAULT_FRAME_PAINT_WIDTH = 4f;
+    private static final float DEFAULT_FRAME_RADIUS = 14f;
+    private static final float DEFAULT_FRAME_STROKE_PAINT_WIDTH = DEFAULT_FRAME_PAINT_WIDTH + 4f;
+    private static final int DEFAULT_FRAME_COLOR = Color.parseColor("#FFFFFF");
+    private static final int DEFAULT_FRAME_STROKE_COLOR = Color.parseColor("#DCDCDC");
+
     private static final float DEFAULT_ZOOM_TEXT_PAINT_STROKE_WIDTH = 4f;
     private static final float DEFAULT_ZOOM_TEXT_SIZE = 80f;
-    private static final int DEFAULT_PAINT_COLOR = Color.parseColor("#ffffff");
     private float mDownEventX = 0f;
     private float mDownEventY = 0f;
     private long mDownEventTime = 0L;
     private Paint mFramePaint;
+    private Paint mFrameStrokePaint;
     private Paint mZoomPaint;
-    private boolean mAnimationEnable = false;
+    private boolean mFocusAnimationEnable = false;
 
     private ValueAnimator mFocusAnimation;
 
@@ -86,43 +91,56 @@ public class FocusView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
-        if (mAnimationEnable) {
+        if (mFocusAnimationEnable) {
+            //绘制对焦框
             float offsetX = mDownEventX;
             float offsetY = mDownEventY;
-            if ((offsetX - mFrameWidth / 2) < 0) {
+            if ((offsetX - mFocusFrameWidth / 2) < 0) {
                 //焦点框超过了有效范围最左侧，向右偏移x坐标
-                offsetX = offsetX + 0 - (offsetX - mFrameWidth / 2);
+                offsetX = offsetX + 0 - (offsetX - mFocusFrameWidth / 2);
             }
-            if ((offsetY - mFrameWidth / 2) < 0) {
+            if ((offsetY - mFocusFrameWidth / 2) < 0) {
                 //焦点框超过了有效范围最上侧，向下偏移y坐标
-                offsetY = offsetY + 0 - (offsetY - mFrameWidth / 2);
+                offsetY = offsetY + 0 - (offsetY - mFocusFrameWidth / 2);
             }
 
-            if ((offsetX + mFrameWidth / 2) > mEffectiveWidth) {
+            if ((offsetX + mFocusFrameWidth / 2) > mEffectiveWidth) {
                 //焦点框超过了有效范围最右侧，向左偏移x坐标
-                offsetX = offsetX - ((offsetX + mFrameWidth / 2) - mEffectiveWidth);
+                offsetX = offsetX - ((offsetX + mFocusFrameWidth / 2) - mEffectiveWidth);
             }
 
-            if ((offsetY + mFrameWidth / 2) > mEffectiveHeight) {
+            if ((offsetY + mFocusFrameWidth / 2) > mEffectiveHeight) {
                 //焦点框超过了有效范围最下侧，向上偏移y坐标
-                offsetY = offsetY - ((offsetY + mFrameWidth / 2) - mEffectiveHeight);
+                offsetY = offsetY - ((offsetY + mFocusFrameWidth / 2) - mEffectiveHeight);
             }
             canvas.drawRoundRect(
-                    offsetX - mFrameWidth / 2,
-                    offsetY - mFrameWidth / 2,
-                    offsetX + mFrameWidth / 2,
-                    offsetY + mFrameWidth / 2,
-                    8,
-                    8,
+                    offsetX - mFocusFrameWidth / 2,
+                    offsetY - mFocusFrameWidth / 2,
+                    offsetX + mFocusFrameWidth / 2,
+                    offsetY + mFocusFrameWidth / 2,
+                    DEFAULT_FRAME_RADIUS,
+                    DEFAULT_FRAME_RADIUS,
+                    mFrameStrokePaint);
+
+            canvas.drawRoundRect(
+                    offsetX - mFocusFrameWidth / 2,
+                    offsetY - mFocusFrameWidth / 2,
+                    offsetX + mFocusFrameWidth / 2,
+                    offsetY + mFocusFrameWidth / 2,
+                    DEFAULT_FRAME_RADIUS,
+                    DEFAULT_FRAME_RADIUS,
                     mFramePaint);
+
         } else if (mFaceFrameEnable) {
             //人脸识别框和点击对焦框互斥
-            canvas.drawRect(faceLeft, faceTop, faceRight, faceBottom, mFramePaint);
+            canvas.drawRoundRect(faceLeft, faceTop, faceRight, faceBottom, DEFAULT_FRAME_RADIUS, DEFAULT_FRAME_RADIUS, mFrameStrokePaint);
+            canvas.drawRoundRect(faceLeft, faceTop, faceRight, faceBottom, DEFAULT_FRAME_RADIUS, DEFAULT_FRAME_RADIUS, mFramePaint);
         }
 
 
         if (mZoomSizeEnable) {
-            canvas.drawText( String.format("%.1f", mZoomSize) + "X", getWidth() / 2f, getHeight() / 2f, mZoomPaint);
+            //绘制缩放比例文字，保留一位小数
+            canvas.drawText(String.format("%.1f", mZoomSize) + "X", getWidth() / 2f, getHeight() / 2f, mZoomPaint);
         }
     }
 
@@ -146,6 +164,7 @@ public class FocusView extends View {
             case MotionEvent.ACTION_MOVE:
                 if (mTouchMotionType == 2) {
                     if (event.getPointerCount() >= 2) {
+                        //执行缩放
                         float currentSpacing = getPointerSpacing(event.getX(0), event.getY(0), event.getX(1), event.getY(1));
                         notifyZoomListener(currentSpacing / mPointerSpacing - mScale);
                         mScale = currentSpacing / mPointerSpacing;
@@ -288,13 +307,19 @@ public class FocusView extends View {
 
     private void init() {
         mFramePaint = new Paint();
-        mFramePaint.setColor(DEFAULT_PAINT_COLOR);
-        mFramePaint.setStrokeWidth(DEFAULT_PAINT_STROKE_WIDTH);
+        mFramePaint.setColor(DEFAULT_FRAME_COLOR);
+        mFramePaint.setStrokeWidth(DEFAULT_FRAME_PAINT_WIDTH);
         mFramePaint.setStyle(Paint.Style.STROKE);
         mFramePaint.setAntiAlias(true);
 
+        mFrameStrokePaint = new Paint();
+        mFrameStrokePaint.setColor(DEFAULT_FRAME_STROKE_COLOR);
+        mFrameStrokePaint.setStrokeWidth(DEFAULT_FRAME_STROKE_PAINT_WIDTH);
+        mFrameStrokePaint.setStyle(Paint.Style.STROKE);
+        mFrameStrokePaint.setAntiAlias(true);
+
         mZoomPaint = new Paint();
-        mZoomPaint.setColor(DEFAULT_PAINT_COLOR);
+        mZoomPaint.setColor(DEFAULT_FRAME_COLOR);
         mZoomPaint.setStrokeWidth(DEFAULT_ZOOM_TEXT_PAINT_STROKE_WIDTH);
         mZoomPaint.setTextAlign(Paint.Align.CENTER);
         mZoomPaint.setTextSize(DEFAULT_ZOOM_TEXT_SIZE);
@@ -309,24 +334,25 @@ public class FocusView extends View {
     }
 
     private ValueAnimator setUpFocusAnimation() {
+        //对焦框的略微缩紧动画
         ValueAnimator animator = ValueAnimator.ofFloat(DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_WIDTH * 0.7f, DEFAULT_FRAME_WIDTH);
         animator.setDuration(500);
-        animator.setInterpolator(new AccelerateDecelerateInterpolator());
+        animator.setInterpolator(new AccelerateDecelerateInterpolator());//先加速后减速非线性动画
         animator.addUpdateListener(animation -> {
-            mFrameWidth = (float) animation.getAnimatedValue();
+            mFocusFrameWidth = (float) animation.getAnimatedValue();
             invalidate();
         });
         animator.addListener(new AnimatorListenerAdapter() {
             @Override
             public void onAnimationStart(Animator animation) {
                 super.onAnimationStart(animation);
-                mAnimationEnable = true;
+                mFocusAnimationEnable = true;
             }
 
             @Override
             public void onAnimationEnd(Animator animation) {
                 super.onAnimationEnd(animation);
-                mAnimationEnable = false;
+                mFocusAnimationEnable = false;
             }
         });
         return animator;
