@@ -49,6 +49,7 @@ import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
 import com.liaoww.media.view.widget.AutoFitTextureView;
 import com.liaoww.media.view.widget.FocusView;
+import com.liaoww.media.view.widget.TimerView;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -74,6 +75,7 @@ public class RecorderFragment extends MediaFragment {
     private FocusView mFocusView;
     private LinearLayout mContainer;
     private FocusView.FocusListener mListener;
+    private TimerView mTimerView;
 
     //camera相关参数配置
     private String mCameraId;
@@ -138,6 +140,7 @@ public class RecorderFragment extends MediaFragment {
         closeCamera();
         releaseHandler();
         removeTexture();
+        stopRecorder(true);
     }
 
     @Override
@@ -157,10 +160,11 @@ public class RecorderFragment extends MediaFragment {
             if (!mEncoderRunning) {
                 startRecorder();
             } else {
-                stopRecorder();
+                stopRecorder(false);
             }
         });
         mContainer = view.findViewById(R.id.surface_container);
+        mTimerView = view.findViewById(R.id.timer_view);
     }
 
 
@@ -170,17 +174,23 @@ public class RecorderFragment extends MediaFragment {
             mStartButton.setText("结束录制");
             initMediaRecorder();
             createCameraRecorderSession(mCameraDevice, buildRecorderSurface());
+            mTimerView.start();
+            mTimerView.setVisibility(View.VISIBLE);
         } else {
             Toast.makeText(getActivity(), "还没准备好", Toast.LENGTH_SHORT).show();
         }
     }
 
-    private void stopRecorder() {
+    private void stopRecorder(boolean release) {
         mEncoderRunning = false;
 //                    FFmpeg.releaseEncoder();
         mStartButton.setText("开始录制");
         mMediaRecorder.stopRecorder();
-        createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
+        if (!release) {
+            createCameraPreviewSession(mCameraDevice, buildPreviewSurface());
+        }
+        mTimerView.stop();
+        mTimerView.setVisibility(View.GONE);
     }
 
     private void initMediaRecorder() {

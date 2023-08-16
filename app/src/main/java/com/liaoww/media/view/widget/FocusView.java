@@ -291,13 +291,14 @@ public class FocusView extends View {
         mFramePaint.setColor(DEFAULT_PAINT_COLOR);
         mFramePaint.setStrokeWidth(DEFAULT_PAINT_STROKE_WIDTH);
         mFramePaint.setStyle(Paint.Style.STROKE);
+        mFramePaint.setAntiAlias(true);
 
         mZoomPaint = new Paint();
         mZoomPaint.setColor(DEFAULT_PAINT_COLOR);
         mZoomPaint.setStrokeWidth(DEFAULT_ZOOM_TEXT_PAINT_STROKE_WIDTH);
         mZoomPaint.setTextAlign(Paint.Align.CENTER);
         mZoomPaint.setTextSize(DEFAULT_ZOOM_TEXT_SIZE);
-        Paint.FontMetrics fontMetrics = mZoomPaint.getFontMetrics();
+        mZoomPaint.setAntiAlias(true);
 
         mHandler = new Handler(Looper.getMainLooper()) {
             @Override
