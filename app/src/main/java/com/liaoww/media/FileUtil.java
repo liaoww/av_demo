@@ -5,6 +5,8 @@ import android.content.Context;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class FileUtil {
     public static String getPictureRootPath(Context context) {
@@ -29,6 +31,26 @@ public class FileUtil {
             return null;
         }
         return realPath;
+    }
+
+    public static List<File> loadAllPhoto(Context context) {
+        File photoRootPath = new File(FileUtil.getPictureRootPath(context.getApplicationContext()));
+        List<File> fileList = null;
+        if (photoRootPath.exists()) {
+            File[] files = photoRootPath.listFiles();
+            if (files != null) {
+                fileList = new ArrayList<>();
+                for (File file : files) {
+                    if (file.isFile()) {
+                        fileList.add(file);
+                    }
+                }
+                fileList.sort((file1, file2) -> {
+                    return Long.compare(file2.lastModified(), file1.lastModified());// 最后修改的文件在前
+                });
+            }
+        }
+        return fileList;
     }
 
     private static String getRootPath(Context context, String tag) {

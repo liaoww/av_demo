@@ -22,15 +22,15 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:text="闪光灯关"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintLeft_toLeftOf="parent" />
+        app:layout_constraintRight_toLeftOf="@+id/aspectRatio_button"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <Button
         android:id="@+id/aspectRatio_button"
         android:layout_width="100dp"
         android:layout_height="48dp"
-        android:gravity="center"
         android:layout_margin="16dp"
+        android:gravity="center"
         app:layout_constraintRight_toRightOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -43,7 +43,7 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="parent"/>
+        app:layout_constraintTop_toTopOf="parent" />
 
     <com.liaoww.media.view.widget.FocusView
         android:id="@+id/focus_view"

@@ -1,25 +1,37 @@
-package com.liaoww.media.view;
+package com.liaoww.media.view.main;
 
 import android.Manifest;
+import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.os.Bundle;
 import android.util.SparseArray;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.TextView;
-import android.graphics.Color;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.viewpager2.widget.ViewPager2;
 
+import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.resource.bitmap.CenterCrop;
+import com.bumptech.glide.load.resource.bitmap.RoundedCorners;
+import com.bumptech.glide.load.resource.drawable.DrawableTransitionOptions;
 import com.google.android.material.tabs.TabLayout;
 import com.google.android.material.tabs.TabLayoutMediator;
+import com.liaoww.media.FileUtil;
 import com.liaoww.media.FragmentAdapter;
 import com.liaoww.media.R;
+import com.liaoww.media.view.photo.PhotoActivity;
+
+import java.io.File;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_PERMISSIONS = 10000000;
@@ -28,9 +40,11 @@ public class MainActivity extends AppCompatActivity {
             Manifest.permission.CAMERA,
             Manifest.permission.RECORD_AUDIO};
 
+    private SparseArray<View> tabViews;
+
     private TabLayout mTabLayout;
     private ViewPager2 mViewPager;
-
+    private ImageView mPhotoButton;
     private FragmentAdapter mAdapter;
     private TabLayoutMediator mTabLayoutMediator;
 
@@ -39,7 +53,16 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViews();
+        initPhotoButton();
         requestPermission(permissions);
+        new ViewModelProvider(MainActivity.this)
+                .get(MainViewModel.class)
+                .getLastPhoto().observe(MainActivity.this, path -> {
+                    File file = new File(path);
+                    if (file.exists()) {
+                        loadLastPhoto(file);
+                    }
+                });
     }
 
     @Override
@@ -62,7 +85,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if(mTabLayoutMediator != null){
+        if (mTabLayoutMediator != null) {
             mTabLayoutMediator.detach();
         }
     }
@@ -70,12 +93,31 @@ public class MainActivity extends AppCompatActivity {
     private void findViews() {
         mTabLayout = findViewById(R.id.tab_layout);
         mViewPager = findViewById(R.id.view_pager);
-        findViewById(R.id.change_camera_button).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                mAdapter.changeCamera();
-            }
+        mPhotoButton = findViewById(R.id.photo_button);
+        findViewById(R.id.change_camera_button).setOnClickListener(v -> mAdapter.changeCamera());
+    }
+
+    private void initPhotoButton() {
+        mPhotoButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, PhotoActivity.class);
+            startActivity(intent);
         });
+        loadAllPhoto();
+    }
+
+    private void loadAllPhoto() {
+        List<File> fileList = FileUtil.loadAllPhoto(getApplicationContext());
+        if (fileList != null && fileList.size() > 0) {
+            loadLastPhoto(fileList.get(0));
+        }
+    }
+
+    private void loadLastPhoto(File file) {
+        Glide.with(MainActivity.this)
+                .load(file)
+                .transition(DrawableTransitionOptions.withCrossFade(500))
+                .transform(new CenterCrop(), new RoundedCorners(12))
+                .into(mPhotoButton);
     }
 
     private void initPager() {
@@ -89,8 +131,6 @@ public class MainActivity extends AppCompatActivity {
         });
         mTabLayoutMediator.attach();
     }
-
-    private SparseArray<View> tabViews;
 
     private View fetchTabViewByPosition(int position) {
         if (tabViews == null) {
@@ -106,7 +146,7 @@ public class MainActivity extends AppCompatActivity {
             textView.setTextSize(22f);
             textView.setGravity(Gravity.CENTER);
             textView.setTextColor(Color.parseColor("#ffffff"));
-            tabViews.put(position,textView);
+            tabViews.put(position, textView);
             return textView;
         }
     }

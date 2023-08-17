@@ -334,9 +334,9 @@ public class FocusView extends View {
     }
 
     private ValueAnimator setUpFocusAnimation() {
-        //对焦框的略微缩紧动画
-        ValueAnimator animator = ValueAnimator.ofFloat(DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_WIDTH * 0.7f, DEFAULT_FRAME_WIDTH);
-        animator.setDuration(500);
+        //对焦框的略微缩紧动画 最后在最大值停留一下
+        ValueAnimator animator = ValueAnimator.ofFloat(DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_WIDTH * 0.7f, DEFAULT_FRAME_WIDTH, DEFAULT_FRAME_WIDTH);
+        animator.setDuration(800);
         animator.setInterpolator(new AccelerateDecelerateInterpolator());//先加速后减速非线性动画
         animator.addUpdateListener(animation -> {
             mFocusFrameWidth = (float) animation.getAnimatedValue();

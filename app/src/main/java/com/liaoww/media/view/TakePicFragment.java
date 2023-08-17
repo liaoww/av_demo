@@ -39,6 +39,8 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
 
 import com.liaoww.media.AspectRatio;
 import com.liaoww.media.CameraUtil;
@@ -46,6 +48,7 @@ import com.liaoww.media.FileUtil;
 import com.liaoww.media.FlashMode;
 import com.liaoww.media.Orientations;
 import com.liaoww.media.R;
+import com.liaoww.media.view.main.MainViewModel;
 import com.liaoww.media.view.widget.AutoFitTextureView;
 import com.liaoww.media.view.widget.FocusView;
 
@@ -101,6 +104,8 @@ public class TakePicFragment extends MediaFragment {
     private Handler mHandler;
     private final Semaphore cameraOpenCloseLock = new Semaphore(1);
 
+    private MainViewModel mainViewModel = null;
+
 
     public static TakePicFragment of() {
         return new TakePicFragment();
@@ -124,6 +129,7 @@ public class TakePicFragment extends MediaFragment {
         initAspectRatioButton(view);
         initFocusView(view);
         initTexture();
+        mainViewModel = new ViewModelProvider(getActivity()).get(MainViewModel.class);
     }
 
     @Override
@@ -316,7 +322,8 @@ public class TakePicFragment extends MediaFragment {
                     String outputPath = FileUtil.saveJpeg2File(data, FileUtil.getPictureRootPath(getContext()));
                     if (outputPath != null) {
                         //保存成功之后，弹窗显示
-                        PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(), "pic");
+                        mainViewModel.setLastPhoto(outputPath);
+//                        PicFragment.of(outputPath).show(getActivity().getSupportFragmentManager(), "pic");
                     }
                 }
             }
