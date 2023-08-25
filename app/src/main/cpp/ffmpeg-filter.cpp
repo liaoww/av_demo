@@ -3,6 +3,7 @@
 //
 #include <jni.h>
 #include <android/log.h>
+#include <string.h>
 
 
 extern "C"
@@ -95,8 +96,6 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
                                           jint output_rotation, jint mirror_rotation) {
     char *input_file_path = const_cast<char *>(env->GetStringUTFChars(input, nullptr));
     char *output_file_path = const_cast<char *>(env->GetStringUTFChars(output, nullptr));
-    int rotation = output_rotation;
-    int mirror = mirror_rotation;
 
     const AVCodec *avCodec;
     AVFormatContext *pFormatCtx = nullptr;
@@ -122,8 +121,8 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
     AVFilterGraph *filter_graph = nullptr;
 
     //滤镜参数
-    char args[512];
-
+    char args[128];
+    char filters[128] = "";
     int ret = -1;
 
     ret = avformat_open_input(&pFormatCtx, input_file_path, nullptr, nullptr);
@@ -286,11 +285,23 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
     // 将filter_descr字符串描述的过滤器链添加到filter grapha中
     // const char *filter_descr = "scale=78:24,transpose=cclock";
     // filter_descr表示的是一个过滤器链，scale+transpose
-    ret = avfilter_graph_parse_ptr(filter_graph,
-                                   mirror == 180 ? "transpose=1,hflip" : "transpose=1",
+    if (output_rotation == 90) {
+        strcat(filters, "transpose=1");
+    } else if (output_rotation == 180) {
+        strcat(filters, "transpose=1,transpose=1");
+    } else if (output_rotation == 270) {
+        strcat(filters, "transpose=2");
+    }
+
+    if (mirror_rotation == 180) {
+        //添加镜像滤镜
+        strcat(filters, output_rotation == 0 ? "hflip" : ",hflip");
+    }
+
+    ret = avfilter_graph_parse_ptr(filter_graph, filters,
                                    &inputs, &outputs, nullptr);
     if (ret < 0) {
-        LOGE("avfilter_graph_parse_ptr error");
+        LOGE("avfilter_graph_parse_ptr error : %s", av_err2str(ret));
         goto end;
     }
 

@@ -111,6 +111,7 @@ public class PicFragment extends DialogFragment {
 
         mSaveButton = view.findViewById(R.id.save_button);
         mSaveButton.setOnClickListener(v -> doSave());
+        mSaveButton.setEnabled(isImageChange());
     }
 
     private void doRotation() {
@@ -123,6 +124,7 @@ public class PicFragment extends DialogFragment {
         animatorSet.setDuration(500);
         animatorSet.start();
         mCurrentRotation = (mCurrentRotation + 90) % 360;
+        mSaveButton.setEnabled(isImageChange());
     }
 
     private void doMirror() {
@@ -135,9 +137,12 @@ public class PicFragment extends DialogFragment {
         animatorSet.setDuration(500);
         animatorSet.start();
         mMirrorRotation = (mMirrorRotation + 180) % 360;
+        mSaveButton.setEnabled(isImageChange());
     }
 
     private void doSave() {
+        LoadingFragment.of().show(getActivity().getSupportFragmentManager(), "loading");
+
         threadPool.execute(() -> {
             String outputPath = FileUtil.getPictureOutputPath(getContext());
             int result = FFmpeg.rotation(mPath, outputPath, (int) mCurrentRotation, (int) mMirrorRotation);
@@ -145,9 +150,16 @@ public class PicFragment extends DialogFragment {
                 mainViewModel.setLastPhoto(outputPath);
                 View view = getView();
                 if (view != null) {
-                    view.post(() -> Toast.makeText(getContext(), "保存成功", Toast.LENGTH_SHORT).show());
+                    view.post(() -> {
+                        LoadingFragment.of().dismissAllowingStateLoss();
+                        Toast.makeText(getContext(), "保存成功", Toast.LENGTH_SHORT).show();
+                    });
                 }
             }
         });
+    }
+
+    private boolean isImageChange() {
+        return mCurrentRotation != 0 || mMirrorRotation != 0;
     }
 }
