@@ -8,6 +8,7 @@ extern "C"
 #include <unistd.h>
 
 #include "libavformat/avformat.h"
+#include "libavfilter/avfilter.h"
 #include "libavcodec/avcodec.h"
 #include "libswscale/swscale.h"
 #include "libswresample/swresample.h"
@@ -17,7 +18,7 @@ extern "C"
 }
 
 
-#define LOG_TAG "JNI"
+#define LOG_TAG "FFMPEG"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
 AVFormatContext *avformat_context = NULL;
@@ -288,9 +289,10 @@ int initEncoder(const char *out_path, int output_width, int output_height) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_liaoww_media_FFmpeg_yuv2Mp4(JNIEnv *env, jclass clazz, jstring path, jbyteArray yuv_data,
-                                     jint length,
-                                     jint output_width, jint output_height) {
+Java_com_liaoww_media_jni_FFmpeg_yuv2Mp4(JNIEnv *env, jclass clazz, jstring path,
+                                         jbyteArray yuv_data,
+                                         jint length,
+                                         jint output_width, jint output_height) {
 
     if (!encoder_init) {
         LOGE("initEncoder");
@@ -324,7 +326,7 @@ Java_com_liaoww_media_FFmpeg_yuv2Mp4(JNIEnv *env, jclass clazz, jstring path, jb
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_liaoww_media_FFmpeg_releaseEncoder(JNIEnv *env, jclass clazz) {
+Java_com_liaoww_media_jni_FFmpeg_releaseEncoder(JNIEnv *env, jclass clazz) {
     pthread_mutex_lock(&pthread_decode_mutex);
 
     LOGE("native_releaseEncoder");
@@ -336,9 +338,9 @@ Java_com_liaoww_media_FFmpeg_releaseEncoder(JNIEnv *env, jclass clazz) {
 
 extern "C"
 JNIEXPORT void JNICALL
-Java_com_liaoww_media_FFmpeg_yuv2Mp4_1422(JNIEnv *env, jclass clazz, jstring path,
-                                          jbyteArray yuv_data, jint length, jint width,
-                                          jint height) {
+Java_com_liaoww_media_jni_FFmpeg_yuv2Mp4_1422(JNIEnv *env, jclass clazz, jstring path,
+                                              jbyteArray yuv_data, jint length, jint width,
+                                              jint height) {
     uint8_t *src_yuv_422;
     int src_stride_uyvy;
     uint8_t *dst_y;
@@ -349,3 +351,103 @@ Java_com_liaoww_media_FFmpeg_yuv2Mp4_1422(JNIEnv *env, jclass clazz, jstring pat
                        width, height);
 
 }
+//extern "C"
+//JNIEXPORT void JNICALL
+//Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring input, jstring output,
+//                                          jint output_rotation) {
+//    char *input_file_path = const_cast<char *>(env->GetStringUTFChars(input, nullptr));
+//    char *output_file_path = const_cast<char *>(env->GetStringUTFChars(output, nullptr));
+//    int rotation = output_rotation;
+//
+//    const AVCodec *avCodec;
+//    AVFormatContext *pFormatCtx = nullptr;
+//    AVCodecContext *pCodecCtx;
+//    AVFrame *avFrame;
+//    AVPacket *pkt;
+//
+//    const AVFilter *filter;
+//    AVFilterContext *filterContext;
+//
+//
+//    int ret = -1;
+//
+//    ret = avformat_open_input(&pFormatCtx, input_file_path, nullptr, nullptr);
+//    if (ret != 0) {
+//        LOGE("can not open  : %s ", input_file_path);
+//        return;
+//    }
+//
+//    ret = avformat_find_stream_info(pFormatCtx, NULL);
+//    if (ret < 0) {
+//        LOGE("can not find stream  : %s", av_err2str(ret));
+//        return;
+//    }
+//
+//    int index = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
+//    if (index < 0) {
+//        LOGE("can not find best stream");
+//        return;
+//    }
+//
+//    avCodec = avcodec_find_decoder(pFormatCtx->streams[index]->codecpar->codec_id);
+//    if (!avCodec) {
+//        LOGE("avcodec_find_decoder error");
+//        return;
+//    }
+//
+//    pCodecCtx = avcodec_alloc_context3(avCodec);
+//    if (!pCodecCtx) {
+//        LOGE("avcodec_alloc_context3 error");
+//        return;
+//    }
+//
+//    ret = avcodec_parameters_to_context(pCodecCtx, pFormatCtx->streams[index]->codecpar);
+//    if (ret < 0) {
+//        LOGE("avcodec_parameters_to_context error : %s", av_err2str(ret));
+//        return;
+//    }
+//
+//    ret = avcodec_open2(pCodecCtx, avCodec, nullptr);
+//    if (ret < 0) {
+//        LOGE("Could not open codec : %s", av_err2str(ret));
+//        return;
+//    }
+//
+//    avFrame = av_frame_alloc();
+//    if (!avFrame) {
+//        LOGE("av frame alloc error : %s", av_err2str(ret));
+//        return;
+//    }
+//
+//    pkt = av_packet_alloc();
+//    while (av_read_frame(pFormatCtx, pkt) >= 0) {
+//        if (pkt->stream_index == index) {
+//            ret = avcodec_send_packet(pCodecCtx, pkt);
+//            if (ret < 0) {
+//                LOGE("avcodec send packet error: %s", av_err2str(ret));
+//                return;
+//            }
+//            for (;;) {
+//                ret = avcodec_receive_frame(pCodecCtx, avFrame);
+//                LOGE("avcodec receive frame : %d", ret);
+//                if (ret == 0) {
+//                    // 成功解码出一帧
+//                    break;
+//                } else if (ret == AVERROR(EAGAIN) || ret == AVERROR(EOF)) {
+//                    // EAGAIN :数据不够输出一帧，需要继续调用avcodec_send_packet
+//                    // EOF : 解码器中所有缓冲已经flush,结束,本次调用没有有效frame 输出,仅仅返回一个状态码
+//                    break;
+//                } else {
+//                    // 其他异常
+//                    return;
+//                }
+//            }
+//            av_packet_unref(pkt);
+//        }
+//    }
+//    LOGE("decodec frame packet size : %d", avFrame->pkt_size);
+//    filter = avfilter_get_by_name("transpose");
+//
+////    avfilter_graph_create_filter(filterContext, filter, "transpose", nullptr, nullptr, nullptr);
+//
+//}

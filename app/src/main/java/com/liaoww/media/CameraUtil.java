@@ -20,12 +20,11 @@ import android.util.Size;
 import android.view.Surface;
 import android.view.TextureView;
 
-import java.io.File;
+import com.liaoww.media.jni.FFmpeg;
+
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.text.Format;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;

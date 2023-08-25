@@ -44,14 +44,13 @@ import androidx.annotation.Nullable;
 import com.liaoww.media.AspectRatio;
 import com.liaoww.media.CameraUtil;
 import com.liaoww.media.CustomMediaRecorder;
-import com.liaoww.media.FFmpeg;
+import com.liaoww.media.jni.FFmpeg;
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
 import com.liaoww.media.view.widget.AutoFitTextureView;
 import com.liaoww.media.view.widget.FocusView;
 import com.liaoww.media.view.widget.TimerView;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 

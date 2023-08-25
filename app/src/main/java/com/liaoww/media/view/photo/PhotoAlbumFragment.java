@@ -8,12 +8,15 @@ import android.view.ViewGroup;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Observer;
+import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
 import com.liaoww.media.view.PicFragment;
+import com.liaoww.media.view.main.MainViewModel;
 
 import java.io.File;
 
@@ -22,6 +25,9 @@ public class PhotoAlbumFragment extends Fragment {
     private RecyclerView mRecyclerView;
 
     private PhotoAlbumAdapter mAdapter;
+
+    private MainViewModel mainViewModel = null;
+
 
     public static PhotoAlbumFragment of() {
         return new PhotoAlbumFragment();
@@ -38,6 +44,10 @@ public class PhotoAlbumFragment extends Fragment {
         super.onViewCreated(view, savedInstanceState);
         findViews(view);
         initRecyclerView(view);
+        mainViewModel = new ViewModelProvider(getActivity()).get(MainViewModel.class);
+        mainViewModel.getLastPhoto().observe(getViewLifecycleOwner(), path -> {
+            mAdapter.updateData(FileUtil.loadAllPhoto(view.getContext().getApplicationContext()));
+        });
     }
 
     private void findViews(View view) {

@@ -22,6 +22,13 @@ add_library(
 
         ffmpeg-util.cpp)
 
+add_library(
+        ffmpeg-filter
+
+        SHARED
+
+        ffmpeg-filter.cpp)
+
 #添加libavutil.so
 add_library(
         avutil
@@ -65,6 +72,28 @@ set_target_properties(
         PROPERTIES IMPORTED_LOCATION
         ${PROJECT_SOURCE_DIR}/../nativeLibs/${ANDROID_ABI}/libswresample.so)
 
+#添加libavfilter.so
+add_library(
+        avfilter
+        SHARED
+        IMPORTED)
+
+set_target_properties(
+        avfilter
+        PROPERTIES IMPORTED_LOCATION
+        ${PROJECT_SOURCE_DIR}/../nativeLibs/${ANDROID_ABI}/libavfilter.so)
+
+#添加libswscale.so
+add_library(
+        swscale
+        SHARED
+        IMPORTED)
+
+set_target_properties(
+        swscale
+        PROPERTIES IMPORTED_LOCATION
+        ${PROJECT_SOURCE_DIR}/../nativeLibs/${ANDROID_ABI}/libswscale.so)
+
 #添加libavutil.so
 add_library(
         libyuv
@@ -81,6 +110,19 @@ target_link_libraries(
         avcodec
         avformat
         swresample
+        avfilter
+        swscale
         libyuv
+        ${log-lib}
+)
+
+target_link_libraries(
+        ffmpeg-filter
+        avutil
+        avcodec
+        avformat
+        swresample
+        avfilter
+        swscale
         ${log-lib}
 )

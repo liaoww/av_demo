@@ -22,6 +22,10 @@ public class FileUtil {
         return getRootPath(context, "video") + File.separator + "video_" + System.currentTimeMillis() + ".mp4";
     }
 
+    public static String getPictureOutputPath(Context context) {
+        return getPictureRootPath(context) + File.separator + "pic_" + System.currentTimeMillis() + ".jpg";
+    }
+
     public static String saveJpeg2File(byte[] data, String root) {
         String realPath = root + File.separator + "pic_" + System.currentTimeMillis() + ".jpg";
         try (FileOutputStream fileOutputStream = new FileOutputStream(new File(realPath))) {
