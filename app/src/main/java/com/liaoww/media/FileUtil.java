@@ -57,6 +57,18 @@ public class FileUtil {
         return fileList;
     }
 
+
+    public static void deleteFiles(List<String> paths) {
+        if (paths != null) {
+            for (String path : paths) {
+                File file = new File(path);
+                if (file.exists() && file.isFile()) {
+                    file.delete();
+                }
+            }
+        }
+    }
+
     private static String getRootPath(Context context, String tag) {
         File file = new File(context.getFilesDir().getAbsolutePath() + File.separator + tag);
         boolean result;

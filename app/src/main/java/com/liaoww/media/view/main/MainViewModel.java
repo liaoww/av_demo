@@ -5,7 +5,7 @@ import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
 public class MainViewModel extends ViewModel {
-    private final MutableLiveData<String> mLastPhotoPath = new MediatorLiveData<>();
+    private final MutableLiveData<String> mLastPhotoPath = new MutableLiveData<>();
 
     public MutableLiveData<String> getLastPhoto() {
         return mLastPhotoPath;
