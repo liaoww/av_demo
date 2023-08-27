@@ -1,10 +1,10 @@
 package com.liaoww.media.view.main;
 
-import androidx.lifecycle.MediatorLiveData;
 import androidx.lifecycle.MutableLiveData;
 import androidx.lifecycle.ViewModel;
 
 public class MainViewModel extends ViewModel {
+    //最近一张照片或者视频
     private final MutableLiveData<String> mLastPhotoPath = new MutableLiveData<>();
 
     public MutableLiveData<String> getLastPhoto() {

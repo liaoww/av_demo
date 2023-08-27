@@ -7,12 +7,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.widget.Button;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -20,14 +18,15 @@ import androidx.recyclerview.widget.SimpleItemAnimator;
 
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
+import com.liaoww.media.ThreadPoolUtil;
 import com.liaoww.media.view.LoadingFragment;
+import com.liaoww.media.view.MApplication;
 import com.liaoww.media.view.PicFragment;
 import com.liaoww.media.view.main.MainViewModel;
 
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class PhotoAlbumFragment extends Fragment {
     //View
@@ -43,7 +42,7 @@ public class PhotoAlbumFragment extends Fragment {
 
     private PhotoViewModel mPhotoViewModel;
 
-    private ExecutorService mThreadPool = Executors.newCachedThreadPool(r -> new Thread(r, "Album Thread"));
+    private Future mFuture;
 
 
     public static PhotoAlbumFragment of() {
@@ -64,9 +63,23 @@ public class PhotoAlbumFragment extends Fragment {
         initViewModel();
     }
 
+    @Override
+    public void onResume() {
+        super.onResume();
+        mTitle.post(() -> showOrHideTitle(false, 0));
+    }
+
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        if (mFuture != null) {
+            mFuture.cancel(true);
+        }
+    }
+
     private void initViewModel() {
-        mainViewModel = new ViewModelProvider(getActivity()).get(MainViewModel.class);
-        mainViewModel.getLastPhoto().observe(getViewLifecycleOwner(), path -> {
+        mainViewModel = MApplication.getApp(getContext()).getViewModelProvider().get(MainViewModel.class);
+        mainViewModel.getLastPhoto().observe(getActivity(), path -> {
             mAdapter.updateData(FileUtil.loadAllPhoto(getContext().getApplicationContext()));
         });
         mPhotoViewModel = new ViewModelProvider(this).get(PhotoViewModel.class);
@@ -78,17 +91,18 @@ public class PhotoAlbumFragment extends Fragment {
     private void findViews(View view) {
         mRecyclerView = view.findViewById(R.id.recycler_view);
         mTitle = view.findViewById(R.id.title_layout);
-        mTitle.post(() -> showOrHideTitle(false, 0));
         mDeleteButton = view.findViewById(R.id.delete_button);
         mDeleteButton.setOnClickListener(v -> {
             List<String> paths = mPhotoViewModel.getSelectPaths().getValue();
             if (paths != null && paths.size() > 0) {
                 LoadingFragment.of().show(getActivity().getSupportFragmentManager(), "album");
-                mThreadPool.execute(() -> {
+                mFuture = ThreadPoolUtil.getThreadPool().submit(() -> {
                     FileUtil.deleteFiles(paths);
                     view.post(() -> {
                         LoadingFragment.of().dismissAllowingStateLoss();
-                        mAdapter.updateData(FileUtil.loadAllPhoto(view.getContext().getApplicationContext()));
+                        List<File> files = FileUtil.loadAllPhoto(view.getContext().getApplicationContext());
+                        mAdapter.updateData(files);
+                        mainViewModel.setLastPhoto(files.size() > 0 ? mAdapter.getData().get(0).getAbsolutePath() : "");
                     });
                 });
             }
@@ -113,7 +127,11 @@ public class PhotoAlbumFragment extends Fragment {
     }
 
     private void showOrHideTitle(boolean select, int duration) {
-        ObjectAnimator objectAnimation = ObjectAnimator.ofFloat(mTitle, "translationY", select ? -mTitle.getHeight() : 0, select ? 0 : -mTitle.getHeight());
+        int height = mTitle.getHeight();
+        if (height == 0) {
+            return;
+        }
+        ObjectAnimator objectAnimation = ObjectAnimator.ofFloat(mTitle, "translationY", select ? -height : 0, select ? 0 : -height);
         objectAnimation.setInterpolator(new AccelerateDecelerateInterpolator());
         objectAnimation.setDuration(duration);
         objectAnimation.start();

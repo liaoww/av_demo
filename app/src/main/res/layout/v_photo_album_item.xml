@@ -9,6 +9,18 @@
         android:layout_height="match_parent"
         android:scaleType="center" />
 
+    <TextView
+        android:id="@+id/text_view"
+        android:layout_gravity="start|bottom"
+        android:layout_width="wrap_content"
+        android:textColor="#ffffff"
+        android:background="#aa000000"
+        android:paddingLeft="2dp"
+        android:paddingRight="2dp"
+        android:layout_marginStart="2dp"
+        android:layout_marginBottom="2dp"
+        android:layout_height="wrap_content"/>
+
     <View
         android:id="@+id/cover"
         android:layout_width="match_parent"

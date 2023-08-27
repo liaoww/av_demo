@@ -39,21 +39,31 @@ public class FileUtil {
 
     public static List<File> loadAllPhoto(Context context) {
         File photoRootPath = new File(FileUtil.getPictureRootPath(context.getApplicationContext()));
-        List<File> fileList = null;
+        File viewRootPath = new File(FileUtil.getVideoRootPath(context.getApplicationContext()));
+        List<File> fileList = new ArrayList<>();
         if (photoRootPath.exists()) {
             File[] files = photoRootPath.listFiles();
             if (files != null) {
-                fileList = new ArrayList<>();
                 for (File file : files) {
                     if (file.isFile()) {
                         fileList.add(file);
                     }
                 }
-                fileList.sort((file1, file2) -> {
-                    return Long.compare(file2.lastModified(), file1.lastModified());// 最后修改的文件在前
-                });
             }
         }
+        if (viewRootPath.exists()) {
+            File[] files = viewRootPath.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isFile()) {
+                        fileList.add(file);
+                    }
+                }
+            }
+        }
+        fileList.sort((file1, file2) -> {
+            return Long.compare(file2.lastModified(), file1.lastModified());// 最后修改的文件在前
+        });
         return fileList;
     }
 

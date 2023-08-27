@@ -1,6 +1,7 @@
 #include <jni.h>
 #include <android/log.h>
 #include <queue>
+#include "util.h"
 
 extern "C"
 {
@@ -351,103 +352,130 @@ Java_com_liaoww_media_jni_FFmpeg_yuv2Mp4_1422(JNIEnv *env, jclass clazz, jstring
                        width, height);
 
 }
-//extern "C"
-//JNIEXPORT void JNICALL
-//Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring input, jstring output,
-//                                          jint output_rotation) {
-//    char *input_file_path = const_cast<char *>(env->GetStringUTFChars(input, nullptr));
-//    char *output_file_path = const_cast<char *>(env->GetStringUTFChars(output, nullptr));
-//    int rotation = output_rotation;
-//
-//    const AVCodec *avCodec;
-//    AVFormatContext *pFormatCtx = nullptr;
-//    AVCodecContext *pCodecCtx;
-//    AVFrame *avFrame;
-//    AVPacket *pkt;
-//
-//    const AVFilter *filter;
-//    AVFilterContext *filterContext;
-//
-//
-//    int ret = -1;
-//
-//    ret = avformat_open_input(&pFormatCtx, input_file_path, nullptr, nullptr);
-//    if (ret != 0) {
-//        LOGE("can not open  : %s ", input_file_path);
-//        return;
-//    }
-//
-//    ret = avformat_find_stream_info(pFormatCtx, NULL);
-//    if (ret < 0) {
-//        LOGE("can not find stream  : %s", av_err2str(ret));
-//        return;
-//    }
-//
-//    int index = av_find_best_stream(pFormatCtx, AVMEDIA_TYPE_VIDEO, -1, -1, nullptr, 0);
-//    if (index < 0) {
-//        LOGE("can not find best stream");
-//        return;
-//    }
-//
-//    avCodec = avcodec_find_decoder(pFormatCtx->streams[index]->codecpar->codec_id);
-//    if (!avCodec) {
-//        LOGE("avcodec_find_decoder error");
-//        return;
-//    }
-//
-//    pCodecCtx = avcodec_alloc_context3(avCodec);
-//    if (!pCodecCtx) {
-//        LOGE("avcodec_alloc_context3 error");
-//        return;
-//    }
-//
-//    ret = avcodec_parameters_to_context(pCodecCtx, pFormatCtx->streams[index]->codecpar);
-//    if (ret < 0) {
-//        LOGE("avcodec_parameters_to_context error : %s", av_err2str(ret));
-//        return;
-//    }
-//
-//    ret = avcodec_open2(pCodecCtx, avCodec, nullptr);
-//    if (ret < 0) {
-//        LOGE("Could not open codec : %s", av_err2str(ret));
-//        return;
-//    }
-//
-//    avFrame = av_frame_alloc();
-//    if (!avFrame) {
-//        LOGE("av frame alloc error : %s", av_err2str(ret));
-//        return;
-//    }
-//
-//    pkt = av_packet_alloc();
-//    while (av_read_frame(pFormatCtx, pkt) >= 0) {
-//        if (pkt->stream_index == index) {
-//            ret = avcodec_send_packet(pCodecCtx, pkt);
-//            if (ret < 0) {
-//                LOGE("avcodec send packet error: %s", av_err2str(ret));
-//                return;
-//            }
-//            for (;;) {
-//                ret = avcodec_receive_frame(pCodecCtx, avFrame);
-//                LOGE("avcodec receive frame : %d", ret);
-//                if (ret == 0) {
-//                    // 成功解码出一帧
-//                    break;
-//                } else if (ret == AVERROR(EAGAIN) || ret == AVERROR(EOF)) {
-//                    // EAGAIN :数据不够输出一帧，需要继续调用avcodec_send_packet
-//                    // EOF : 解码器中所有缓冲已经flush,结束,本次调用没有有效frame 输出,仅仅返回一个状态码
-//                    break;
-//                } else {
-//                    // 其他异常
-//                    return;
-//                }
-//            }
-//            av_packet_unref(pkt);
-//        }
-//    }
-//    LOGE("decodec frame packet size : %d", avFrame->pkt_size);
-//    filter = avfilter_get_by_name("transpose");
-//
-////    avfilter_graph_create_filter(filterContext, filter, "transpose", nullptr, nullptr, nullptr);
-//
-//}
+
+
+extern "C"
+jobject buildJObject(JNIEnv *env, const char *classname, ...) {
+    jclass jClass;
+    jobject jObject = nullptr;
+    jClass = (*env).FindClass(classname);
+    if (jClass != nullptr) {
+        jmethodID construct_function = (*env).GetMethodID(jClass, "<init>",
+                                                          "()V");
+        if (construct_function != nullptr) {
+            va_list args;
+            va_start(args, classname);
+            jObject = (*env).NewObjectV(jClass, construct_function, args);
+            va_end(args);
+
+        }
+        (*env).DeleteLocalRef(jClass);
+    }
+    return jObject;
+}
+
+extern "C" int
+callMethodByName(JNIEnv *env, jobject obj, jclass clazz, const char *name, const char *sig, ...) {
+    jmethodID methodId;
+    methodId = (*env).GetMethodID(clazz, name, sig);
+    if (methodId == nullptr) {
+        return -1;
+    }
+    va_list args;
+    va_start(args, sig);
+    (*env).CallNonvirtualVoidMethodV(obj, clazz, methodId, args);
+    va_end(args);
+
+    return 0;
+}
+
+extern "C"
+JNIEXPORT jobject JNICALL
+buildJClassMediaInfo(JNIEnv *env, jstring url, AVFormatContext *pFormatContext) {
+    jclass cls_media_info;
+    jobject obj_media_info;
+    jobject obj_av_codec_info;
+
+    jlong duration, bitrate;
+    jint height, width;
+    jint fps;
+    AVStream *avStream;
+    AVCodecParameters *codecpar;
+
+    //封装格式信息
+    duration = static_cast<long>(pFormatContext->duration / 1000);//单位为us 换算成ms
+    bitrate = static_cast<long>(pFormatContext->bit_rate);//单位bps
+
+    //输出流信息
+    avStream = *pFormatContext->streams;
+    codecpar = avStream->codecpar;
+    // 平均帧率 1/25
+    fps = static_cast<int>(avStream->avg_frame_rate.num);
+    // 1/128000
+    avStream->time_base;
+
+    //codec 信息
+    const AVCodec *avCodec = avcodec_find_decoder(codecpar->codec_id);
+    height = static_cast<int>(codecpar->height);
+    width = static_cast<int>(codecpar->width);
+
+    //找到对应的 java class
+    cls_media_info = (*env).FindClass("com/liaoww/media/jni/MediaInfo");
+    if (cls_media_info == nullptr) {
+        return nullptr;
+    }
+
+    //执行构造方法，传入参数url
+    obj_media_info = buildJObject(env, "com/liaoww/media/jni/MediaInfo", url);
+
+    if (obj_media_info == nullptr) {
+        return nullptr;
+    }
+
+    callMethodByName(env, obj_media_info, cls_media_info, "setPath", "(Ljava/lang/String;)V", url);
+
+    //setDuration
+    callMethodByName(env, obj_media_info, cls_media_info, "setDuration", "(J)V", duration);
+
+    //setBitrate
+    callMethodByName(env, obj_media_info, cls_media_info, "setBitrate", "(J)V", bitrate);
+
+    //setHeight
+    callMethodByName(env, obj_media_info, cls_media_info, "setHeight", "(I)V", height);
+
+    //setWidth
+    callMethodByName(env, obj_media_info, cls_media_info, "setWidth", "(I)V", width);
+
+    //setFps
+    callMethodByName(env, obj_media_info, cls_media_info, "setFps", "(I)V", fps);
+
+    //删除本地变量引用
+    (*env).DeleteLocalRef(cls_media_info);
+    return obj_media_info;
+}
+
+
+extern "C"
+JNIEXPORT jobject JNICALL
+Java_com_liaoww_media_jni_FFmpeg_fetchMediaInfo(JNIEnv *env, jclass clazz, jstring path) {
+    const char *url = env->GetStringUTFChars(path, nullptr);
+
+    AVFormatContext *pFormatContext = avformat_alloc_context();
+
+    int result = avformat_open_input(&pFormatContext, url, nullptr, nullptr);
+
+    jobject mediaInfoObject = nullptr;
+
+    if (result == 0) {
+        if (avformat_find_stream_info(pFormatContext, nullptr) == 0) {
+            mediaInfoObject = buildJClassMediaInfo(env, path, pFormatContext);
+        }
+    }
+
+    avformat_close_input(&pFormatContext);
+    avformat_free_context(pFormatContext);
+    env->ReleaseStringUTFChars(path, url);
+    return mediaInfoObject;
+}
+
+

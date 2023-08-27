@@ -14,4 +14,6 @@ public class FFmpeg {
     public static native void releaseEncoder();
 
     public static native int rotation(String input, String output, int output_rotation, int mirror_rotation);
+
+    public static native MediaInfo fetchMediaInfo(String path);
 }

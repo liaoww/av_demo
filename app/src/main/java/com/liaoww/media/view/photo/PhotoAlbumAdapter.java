@@ -2,18 +2,18 @@ package com.liaoww.media.view.photo;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
-import android.content.Context;
-import android.util.Log;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.AccelerateDecelerateInterpolator;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.lifecycle.ViewModelProvider;
@@ -22,26 +22,50 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.bumptech.glide.Glide;
 import com.liaoww.media.R;
+import com.liaoww.media.ThreadPoolUtil;
+import com.liaoww.media.jni.FFmpeg;
+import com.liaoww.media.jni.MediaInfo;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.ViewHolder>
         implements View.OnClickListener, View.OnLongClickListener, CompoundButton.OnCheckedChangeListener {
-    private List<File> mFileList;
-    private View.OnClickListener mListener;
+
+    private static final int MESSAGE_NOTIFY_ITEM_CHANGE = 1000;
+    private final Map<String, MediaInfo> mMediaInfoMap = new HashMap<>();
 
     private final HashMap<Integer, Boolean> mSelectMap = new HashMap<>();
+
+    private final ConcurrentHashMap<String, Boolean> mRunningTasks = new ConcurrentHashMap<>();
 
     private final List<String> mSelectPaths = new ArrayList<>();
 
     private final PhotoViewModel mViewModel;
+
+    private final Handler mHandler;
+
+    private List<File> mFileList;
+    private View.OnClickListener mListener;
     private boolean mSelectMode = false;
 
     public PhotoAlbumAdapter(ViewModelStoreOwner owner) {
         mViewModel = new ViewModelProvider(owner).get(PhotoViewModel.class);
+        mHandler = new Handler(Looper.getMainLooper()) {
+            @Override
+            public void handleMessage(@NonNull Message msg) {
+                super.handleMessage(msg);
+                switch (msg.what) {
+                    case MESSAGE_NOTIFY_ITEM_CHANGE:
+                        notifyItemChanged(msg.arg1);
+                        break;
+                }
+            }
+        };
     }
 
     @NonNull
@@ -53,7 +77,6 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
     @Override
     public void onBindViewHolder(@NonNull ViewHolder holder, int position) {
         Glide.with(holder.itemView.getContext()).load(mFileList.get(position)).into(holder.mImageView);
-
         holder.itemView.setTag(position);
         holder.itemView.setOnClickListener(this);
         holder.itemView.setOnLongClickListener(this);
@@ -75,7 +98,20 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
             }
         } else {
             holder.mCover.setVisibility(View.GONE);
+            holder.mCheckBox.setChecked(false);
             holder.mCheckBox.setVisibility(View.GONE);
+        }
+
+        String path = mFileList.get(position).getAbsolutePath();
+        if (isNeedFetchMediaInfo(path)) {
+            fetchMediaInfo(path);
+        }
+        MediaInfo mediaInfo = mMediaInfoMap.get(path);
+        if (mediaInfo != null) {
+            holder.mTextView.setVisibility(View.VISIBLE);
+            holder.mTextView.setText(mediaInfo.getDurationText());
+        } else {
+            holder.mTextView.setVisibility(View.GONE);
         }
 
     }
@@ -87,6 +123,10 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
         } else {
             return mFileList.size();
         }
+    }
+
+    public List<File> getData() {
+        return mFileList;
     }
 
     public void updateData(List<File> fileList) {
@@ -123,6 +163,13 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
         if (!mSelectMode) {
             //取消选中状态，清除之前选中的记录
             mSelectMap.clear();
+            clearPath();
+        } else {
+            int position = (int) v.getTag();
+            //进入选中状态
+            mSelectMap.put(position, true);
+            doCoverAnimation(true, v.findViewById(R.id.cover));
+            addPath(mFileList.get(position).getAbsolutePath());
         }
         notifyItemRangeChanged(0, mFileList.size());
         return true;
@@ -155,6 +202,39 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
         } else {
             removePath(mFileList.get(position).getAbsolutePath());
         }
+    }
+
+    private boolean isNeedFetchMediaInfo(String path) {
+        return path.endsWith(".mp4") && mMediaInfoMap.get(path) == null && !mRunningTasks.containsKey(path);
+    }
+
+    private void fetchMediaInfo(String path) {
+        mRunningTasks.put(path, true);
+        ThreadPoolUtil.getThreadPool().submit(() -> {
+            MediaInfo info = FFmpeg.fetchMediaInfo(path);
+            mRunningTasks.remove(path);
+            mMediaInfoMap.put(path, info);
+            int index = getPositionByPath(path);
+            if (index != -1) {
+                Message messages = Message.obtain();
+                messages.what = MESSAGE_NOTIFY_ITEM_CHANGE;
+                messages.arg1 = index;
+                mHandler.sendMessage(messages);
+            }
+        });
+    }
+
+    private int getPositionByPath(String path) {
+        int position = -1;
+        if (mFileList != null) {
+            for (int i = 0; i < mFileList.size(); i++) {
+                if (mFileList.get(i).getAbsolutePath().equals(path)) {
+                    position = i;
+                    break;
+                }
+            }
+        }
+        return position;
     }
 
     private void doCoverAnimation(boolean visible, View view) {
@@ -197,10 +277,17 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
         mViewModel.setSelectPaths(mSelectPaths);
     }
 
+    private void clearPath() {
+        mSelectPaths.clear();
+        mViewModel.setSelectPaths(mSelectPaths);
+    }
+
     public static class ViewHolder extends RecyclerView.ViewHolder {
         private final ImageView mImageView;
         private final View mCover;
         private final CheckBox mCheckBox;
+
+        private final TextView mTextView;
 
         public ViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -214,6 +301,8 @@ public class PhotoAlbumAdapter extends RecyclerView.Adapter<PhotoAlbumAdapter.Vi
             mCover.getLayoutParams().height = imageSize;
 
             mCheckBox = itemView.findViewById(R.id.checkbox);
+
+            mTextView = itemView.findViewById(R.id.text_view);
         }
     }
 }

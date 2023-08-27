@@ -20,7 +20,9 @@ add_library(
 
         SHARED
 
-        ffmpeg-util.cpp)
+        ffmpeg-util.cpp
+        util.cpp
+)
 
 add_library(
         ffmpeg-filter

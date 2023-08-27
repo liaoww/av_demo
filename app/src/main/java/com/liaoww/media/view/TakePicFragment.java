@@ -128,7 +128,7 @@ public class TakePicFragment extends MediaFragment {
         initAspectRatioButton(view);
         initFocusView(view);
         initTexture();
-        mainViewModel = new ViewModelProvider(getActivity()).get(MainViewModel.class);
+        mainViewModel = MApplication.getApp(view.getContext()).getViewModelProvider().get(MainViewModel.class);
     }
 
     @Override

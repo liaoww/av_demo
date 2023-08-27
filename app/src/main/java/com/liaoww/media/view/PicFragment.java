@@ -3,6 +3,7 @@ package com.liaoww.media.view;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -20,11 +21,12 @@ import androidx.lifecycle.ViewModelProvider;
 import com.bumptech.glide.Glide;
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
+import com.liaoww.media.ThreadPoolUtil;
 import com.liaoww.media.jni.FFmpeg;
+import com.liaoww.media.jni.MediaInfo;
 import com.liaoww.media.view.main.MainViewModel;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * 查看图片fragment
@@ -46,7 +48,7 @@ public class PicFragment extends DialogFragment {
 
     private MainViewModel mainViewModel = null;
 
-    private ExecutorService threadPool = Executors.newCachedThreadPool(r -> new Thread(r, "FFmpeg Thread"));
+    private Future mFuture;
 
     public static PicFragment of(String path) {
         Bundle bundle = new Bundle();
@@ -76,7 +78,7 @@ public class PicFragment extends DialogFragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         findViews(view);
-        mainViewModel = new ViewModelProvider(getActivity()).get(MainViewModel.class);
+        mainViewModel = MApplication.getApp(view.getContext()).getViewModelProvider().get(MainViewModel.class);
         Glide.with(PicFragment.this).load(mPath).into(mImageView);
     }
 
@@ -92,9 +94,8 @@ public class PicFragment extends DialogFragment {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if (threadPool != null) {
-            threadPool.shutdown();
-            threadPool = null;
+        if (mFuture != null) {
+            mFuture.cancel(true);
         }
     }
 
@@ -143,7 +144,7 @@ public class PicFragment extends DialogFragment {
     private void doSave() {
         LoadingFragment.of().show(getActivity().getSupportFragmentManager(), "loading");
 
-        threadPool.execute(() -> {
+        mFuture = ThreadPoolUtil.getThreadPool().submit(() -> {
             String outputPath = FileUtil.getPictureOutputPath(getContext());
             int result = FFmpeg.rotation(mPath, outputPath, (int) mCurrentRotation, (int) mMirrorRotation);
             if (result >= 0) {

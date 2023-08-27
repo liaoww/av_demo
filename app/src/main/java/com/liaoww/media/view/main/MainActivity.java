@@ -28,6 +28,7 @@ import com.google.android.material.tabs.TabLayoutMediator;
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.FragmentAdapter;
 import com.liaoww.media.R;
+import com.liaoww.media.view.MApplication;
 import com.liaoww.media.view.photo.PhotoActivity;
 
 import java.io.File;
@@ -55,7 +56,7 @@ public class MainActivity extends AppCompatActivity {
         findViews();
         initPhotoButton();
         requestPermission(permissions);
-        new ViewModelProvider(MainActivity.this)
+        MApplication.getApp(getApplicationContext()).getViewModelProvider()
                 .get(MainViewModel.class)
                 .getLastPhoto().observe(MainActivity.this, path -> {
                     File file = new File(path);
