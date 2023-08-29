@@ -2,6 +2,9 @@ package com.liaoww.media.view;
 
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.graphics.RectF;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
@@ -10,21 +13,23 @@ import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.animation.DecelerateInterpolator;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.DialogFragment;
-import androidx.lifecycle.ViewModelProvider;
 
 import com.bumptech.glide.Glide;
+import com.bumptech.glide.load.DataSource;
+import com.bumptech.glide.load.engine.GlideException;
+import com.bumptech.glide.request.RequestListener;
+import com.bumptech.glide.request.target.Target;
 import com.liaoww.media.FileUtil;
 import com.liaoww.media.R;
 import com.liaoww.media.ThreadPoolUtil;
 import com.liaoww.media.jni.FFmpeg;
-import com.liaoww.media.jni.MediaInfo;
 import com.liaoww.media.view.main.MainViewModel;
+import com.liaoww.media.view.widget.CropImageView;
 
 import java.util.concurrent.Future;
 
@@ -32,7 +37,7 @@ import java.util.concurrent.Future;
  * 查看图片fragment
  */
 public class PicFragment extends DialogFragment {
-    private ImageView mImageView;
+    private CropImageView mImageView;
 
     private Button mRotationButton;
 
@@ -79,7 +84,7 @@ public class PicFragment extends DialogFragment {
         super.onViewCreated(view, savedInstanceState);
         findViews(view);
         mainViewModel = MApplication.getApp(view.getContext()).getViewModelProvider().get(MainViewModel.class);
-        Glide.with(PicFragment.this).load(mPath).into(mImageView);
+        loadImage();
     }
 
     @Override
@@ -112,7 +117,6 @@ public class PicFragment extends DialogFragment {
 
         mSaveButton = view.findViewById(R.id.save_button);
         mSaveButton.setOnClickListener(v -> doSave());
-        mSaveButton.setEnabled(isImageChange());
     }
 
     private void doRotation() {
@@ -125,7 +129,6 @@ public class PicFragment extends DialogFragment {
         animatorSet.setDuration(500);
         animatorSet.start();
         mCurrentRotation = (mCurrentRotation + 90) % 360;
-        mSaveButton.setEnabled(isImageChange());
     }
 
     private void doMirror() {
@@ -138,7 +141,15 @@ public class PicFragment extends DialogFragment {
         animatorSet.setDuration(500);
         animatorSet.start();
         mMirrorRotation = (mMirrorRotation + 180) % 360;
-        mSaveButton.setEnabled(isImageChange());
+    }
+
+    private void resetChange() {
+        AnimatorSet animatorSet = new AnimatorSet();
+        animatorSet.playTogether(
+                ObjectAnimator.ofFloat(mImageView, "rotation", mCurrentRotation),
+                ObjectAnimator.ofFloat(mImageView, "rotationY", mMirrorRotation));
+        animatorSet.setDuration(0);
+        animatorSet.start();
     }
 
     private void doSave() {
@@ -146,18 +157,50 @@ public class PicFragment extends DialogFragment {
 
         mFuture = ThreadPoolUtil.getThreadPool().submit(() -> {
             String outputPath = FileUtil.getPictureOutputPath(getContext());
-            int result = FFmpeg.rotation(mPath, outputPath, (int) mCurrentRotation, (int) mMirrorRotation);
-            if (result >= 0) {
-                mainViewModel.setLastPhoto(outputPath);
-                View view = getView();
-                if (view != null) {
-                    view.post(() -> {
-                        LoadingFragment.of().dismissAllowingStateLoss();
+            RectF rect = mImageView.getFixRect();
+            int result = FFmpeg.filter(mPath, outputPath, (int) mCurrentRotation, (int) mMirrorRotation,
+                    (int) rect.left, (int) rect.top, (int) rect.right, (int) rect.bottom,
+                    mImageView.getAreaWidth(), mImageView.getAreaHeight());
+            View view = getView();
+            if (view != null) {
+                view.post(() -> {
+                    LoadingFragment.of().dismissAllowingStateLoss();
+                    if (result >= 0) {
+                        mainViewModel.setLastPhoto(outputPath);
+                        reset(outputPath);
                         Toast.makeText(getContext(), "保存成功", Toast.LENGTH_SHORT).show();
-                    });
-                }
+                    } else {
+                        Toast.makeText(getContext(), "保存失败", Toast.LENGTH_SHORT).show();
+                    }
+                });
             }
         });
+    }
+
+    private void loadImage() {
+        Glide.with(PicFragment.this).load(mPath).addListener(new RequestListener<Drawable>() {
+            @Override
+            public boolean onLoadFailed(@Nullable GlideException e, Object model, Target<Drawable> target, boolean isFirstResource) {
+                return false;
+            }
+
+            @Override
+            public boolean onResourceReady(Drawable resource, Object model, Target<Drawable> target, DataSource dataSource, boolean isFirstResource) {
+                BitmapDrawable bitmapDrawable = (BitmapDrawable) resource;
+                Log.e("liaoww", "bitmapDrawable width : " + bitmapDrawable.getBitmap().getWidth());
+                Log.e("liaoww", "bitmapDrawable height : " + bitmapDrawable.getBitmap().getHeight());
+                mImageView.setFrameDefaultSize(bitmapDrawable.getBitmap().getWidth(), bitmapDrawable.getBitmap().getHeight());
+                return false;
+            }
+        }).into(mImageView);
+    }
+
+    private void reset(String path) {
+        mPath = path;
+        mMirrorRotation = 0;
+        mCurrentRotation = 0;
+        resetChange();
+        loadImage();
     }
 
     private boolean isImageChange() {

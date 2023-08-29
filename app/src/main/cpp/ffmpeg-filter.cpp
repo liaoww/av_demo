@@ -20,6 +20,21 @@ extern "C"
 #define LOG_TAG "FFMPEG_FILTER"
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR,LOG_TAG,__VA_ARGS__)
 
+#ifndef FILTER_PARAMS
+#define FILTER_PARAMS typedef struct filter_params
+
+FILTER_PARAMS {
+    int rotation;
+    int mirror;
+    int rectLeft;
+    int rectTop;
+    int rectRight;
+    int rectBottom;
+    int areaWidth;
+    int areaHeight;
+} filter_params;
+#endif
+
 int saveAsJPG(char *output_path, AVCodecContext *dec_ctx, AVFrame *frame) {
     FILE *imgFile = nullptr;
     AVCodecContext *imgContext = nullptr;
@@ -90,13 +105,58 @@ int saveAsJPG(char *output_path, AVCodecContext *dec_ctx, AVFrame *frame) {
     return ret;
 }
 
-extern "C"
-JNIEXPORT int JNICALL
-Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring input, jstring output,
-                                          jint output_rotation, jint mirror_rotation) {
-    char *input_file_path = const_cast<char *>(env->GetStringUTFChars(input, nullptr));
-    char *output_file_path = const_cast<char *>(env->GetStringUTFChars(output, nullptr));
+/**
+ * 构造过滤器参数
+ * @param params 过滤器所需参数
+ * @param src_width 原始图像的宽
+ * @param src_height 原始图像的高
+ * @return
+ */
+char *build_filters(filter_params params, int src_width, int src_height) {
+    static char filters[64] = "";
+    memset(filters,'\0',sizeof filters);
+    // 将filter_descr字符串描述的过滤器链添加到filter grapha中
+    // const char *filter_descr = "scale=78:24,transpose=cclock";
+    // filter_descr表示的是一个过滤器链，scale+transpose
+    if (params.rotation == 90) {
+        strcat(filters, "transpose=1");
+    } else if (params.rotation == 180) {
+        strcat(filters, "transpose=1,transpose=1");
+    } else if (params.rotation == 270) {
+        strcat(filters, "transpose=2");
+    }
 
+    if (params.mirror == 180) {
+        //添加镜像滤镜
+        if (params.rotation != 0) {
+            strcat(filters, ",");
+        }
+        strcat(filters, "hflip");
+    }
+
+    //裁剪
+    if (params.rotation != 0 || params.mirror != 0) {
+        strcat(filters, ",");
+    }
+    char cropFilter[64];
+    int cropWidth = (params.rectRight - params.rectLeft) * src_width / params.areaWidth;
+    int cropHeight = (params.rectBottom - params.rectTop) * src_height / params.areaHeight;
+    int cropX = params.rectLeft * src_width / params.areaWidth;
+    int cropY = params.rectTop * src_height / params.areaHeight;
+
+    //w h 为裁剪后的宽高
+    //x y 为裁剪的坐标，基于原始图像
+    snprintf(cropFilter, sizeof(cropFilter),
+             "crop=w=%d:h=%d:x=%d:y=%d",
+             cropWidth, cropHeight, cropX, cropY);
+
+    strcat(filters, cropFilter);
+    LOGE("filters : %s" , filters);
+    return filters;
+}
+
+
+int ffmpeg_filter(char *input_file_path, char *output_file_path, filter_params params) {
     const AVCodec *avCodec;
     AVFormatContext *pFormatCtx = nullptr;
     AVCodecContext *pCodecCtx = nullptr;
@@ -122,8 +182,7 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
 
     //滤镜参数
     char args[128];
-    char filters[128] = "";
-    int ret = -1;
+    int ret;
 
     ret = avformat_open_input(&pFormatCtx, input_file_path, nullptr, nullptr);
     if (ret != 0) {
@@ -281,24 +340,8 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
     inputs->pad_idx = 0;
     inputs->next = nullptr;
 
-
-    // 将filter_descr字符串描述的过滤器链添加到filter grapha中
-    // const char *filter_descr = "scale=78:24,transpose=cclock";
-    // filter_descr表示的是一个过滤器链，scale+transpose
-    if (output_rotation == 90) {
-        strcat(filters, "transpose=1");
-    } else if (output_rotation == 180) {
-        strcat(filters, "transpose=1,transpose=1");
-    } else if (output_rotation == 270) {
-        strcat(filters, "transpose=2");
-    }
-
-    if (mirror_rotation == 180) {
-        //添加镜像滤镜
-        strcat(filters, output_rotation == 0 ? "hflip" : ",hflip");
-    }
-
-    ret = avfilter_graph_parse_ptr(filter_graph, filters,
+    ret = avfilter_graph_parse_ptr(filter_graph,
+                                   build_filters(params, pCodecCtx->width, pCodecCtx->height),
                                    &inputs, &outputs, nullptr);
     if (ret < 0) {
         LOGE("avfilter_graph_parse_ptr error : %s", av_err2str(ret));
@@ -309,7 +352,7 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
     // 3. 配置filtergraph滤镜图，建立滤镜间的连接
     ret = avfilter_graph_config(filter_graph, nullptr);
     if (ret < 0) {
-        LOGE("avfilter_graph_config error");
+        LOGE("avfilter_graph_config error : %s" , av_err2str(ret));
         goto end;
     }
 
@@ -375,5 +418,31 @@ Java_com_liaoww_media_jni_FFmpeg_rotation(JNIEnv *env, jclass clazz, jstring inp
     avfilter_inout_free(&outputs);
 
     return ret;
+}
 
+extern "C"
+JNIEXPORT int JNICALL
+Java_com_liaoww_media_jni_FFmpeg_filter(JNIEnv *env, jclass clazz, jstring input, jstring output,
+                                        jint output_rotation, jint mirror_rotation,
+                                        jint rect_left, jint rect_top, jint rect_right,
+                                        jint rect_bottom,
+                                        jint area_width, jint area_height) {
+    char *input_file_path = const_cast<char *>(env->GetStringUTFChars(input, nullptr));
+    char *output_file_path = const_cast<char *>(env->GetStringUTFChars(output, nullptr));
+
+    filter_params params;
+    params.rotation = output_rotation;
+    params.mirror = mirror_rotation;
+    params.rectLeft = rect_left;
+    params.rectTop = rect_top;
+    params.rectRight = rect_right;
+    params.rectBottom = rect_bottom;
+    params.areaWidth = area_width;
+    params.areaHeight = area_height;
+
+    int result = ffmpeg_filter(input_file_path, output_file_path, params);
+
+    env->ReleaseStringUTFChars(input, input_file_path);
+    env->ReleaseStringUTFChars(output, output_file_path);
+    return result;
 }

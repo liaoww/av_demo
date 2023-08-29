@@ -13,7 +13,16 @@ public class FFmpeg {
 
     public static native void releaseEncoder();
 
-    public static native int rotation(String input, String output, int output_rotation, int mirror_rotation);
+    public static int filter(String input, String output,
+                             int output_rotation, int mirror_rotation) {
+        return filter(input, output, output_rotation, mirror_rotation,
+                -1, -1, -1, -1, 0, 0);
+    }
+
+    public static native int filter(String input, String output,
+                                    int output_rotation, int mirror_rotation,
+                                    int rectLeft, int rectTop,
+                                    int rectRight, int rectBottom, int areaWidth, int areaHeight);
 
     public static native MediaInfo fetchMediaInfo(String path);
 }
