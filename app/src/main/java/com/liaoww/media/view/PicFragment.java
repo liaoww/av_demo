@@ -55,6 +55,9 @@ public class PicFragment extends DialogFragment {
 
     private Future mFuture;
 
+    private float mImageViewCurrentScale = 1f;
+    private float mScale = 1f;
+
     public static PicFragment of(String path) {
         Bundle bundle = new Bundle();
         bundle.putString("path", path);
@@ -121,14 +124,22 @@ public class PicFragment extends DialogFragment {
 
     private void doRotation() {
         AnimatorSet animatorSet = new AnimatorSet();
+        float targetRotation = mCurrentRotation % 360 + 90;
+        float width = getView().getWidth();
+        if ((targetRotation == 90 || targetRotation == 270) && mImageView.getAreaHeight() > width) {
+            mScale = width / mImageView.getAreaHeight();
+        } else {
+            mScale = 1f;
+        }
         animatorSet.playTogether(
-                ObjectAnimator.ofFloat(mImageView, "rotation", mCurrentRotation % 360, mCurrentRotation % 360 + 90),
-                ObjectAnimator.ofFloat(mImageView, "scaleX", 1f, 0.6f, 1f),
-                ObjectAnimator.ofFloat(mImageView, "scaleY", 1f, 0.6f, 1f));
+                ObjectAnimator.ofFloat(mImageView, "rotation", mCurrentRotation % 360f, mCurrentRotation % 360f + 90f),
+                ObjectAnimator.ofFloat(mImageView, "scaleX", mImageViewCurrentScale, mScale < 1f ? mImageViewCurrentScale * mScale : 1f),
+                ObjectAnimator.ofFloat(mImageView, "scaleY", mImageViewCurrentScale, mScale < 1f ? mImageViewCurrentScale * mScale : 1f));
         animatorSet.setInterpolator(new DecelerateInterpolator());
         animatorSet.setDuration(500);
         animatorSet.start();
-        mCurrentRotation = (mCurrentRotation + 90) % 360;
+        mCurrentRotation = (mCurrentRotation + 90f) % 360f;
+        mImageViewCurrentScale = mScale < 1f ? mImageViewCurrentScale * mScale : 1f;
     }
 
     private void doMirror() {
